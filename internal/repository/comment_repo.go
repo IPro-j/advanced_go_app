@@ -25,86 +25,47 @@ func NewCommentRepo(db *sql.DB) *CommentRepo {
 
 // Create создает новый комментарий
 func (r *CommentRepo) Create(ctx context.Context, comment *model.Comment) error {
-	// TODO: Реализовать создание комментария
-	// 1. Подготовить SQL запрос INSERT INTO comments...
-	// 2. Установить created_at и updated_at = time.Now()
-	// 3. Выполнить запрос и получить ID созданной записи
-	// 4. Установить ID в структуру comment
-	//
-	// HINT: Используйте QueryRowContext с RETURNING id
-	// Пример запроса:
-	// INSERT INTO comments (content, post_id, author_id, created_at, updated_at)
-	// VALUES ($1, $2, $3, $4, $5) RETURNING id
 
 	query := `
-		INSERT INTO comments (content, post_id, author_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id
+		INSERT INTO comments (content, post_id, author_id)
+		VALUES ($1, $2, $3)
+		RETURNING id, created_at, updated_at
 	`
 
-	now := time.Now()
-	comment.CreatedAt = now
-	comment.UpdatedAt = now
+	var id int
+	var createdAt, updatedAt time.Time
+	err := r.db.QueryRowContext(ctx, query, comment.Content, comment.PostID, comment.AuthorID).
+		Scan(&id, &createdAt, &updatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to create comment: %w", err)
+	}
 
-	// TODO: Выполнить запрос
-	// err := r.db.QueryRowContext(ctx, query,
-	//     comment.Content, comment.PostID, comment.AuthorID,
-	//     comment.CreatedAt, comment.UpdatedAt,
-	// ).Scan(&comment.ID)
-
-	_ = query // Удалите эту строку после реализации
-	return fmt.Errorf("not implemented")
+	comment.ID = id
+	comment.CreatedAt = createdAt
+	comment.UpdatedAt = updatedAt
+	return nil
 }
 
 // GetByID получает комментарий по ID
 func (r *CommentRepo) GetByID(ctx context.Context, id int) (*model.Comment, error) {
-	// TODO: Реализовать получение комментария по ID
-	// 1. Подготовить SQL запрос SELECT ... FROM comments WHERE id = $1
-	// 2. Выполнить запрос
-	// 3. Просканировать результат в структуру Comment
-	// 4. Обработать случай sql.ErrNoRows -> вернуть ErrCommentNotFound
-
-	query := `
-		SELECT id, content, post_id, author_id, created_at, updated_at
-		FROM comments
-		WHERE id = $1
-	`
-
-	var comment model.Comment
-	// TODO: Выполнить запрос и просканировать результат
-	// err := r.db.QueryRowContext(ctx, query, id).Scan(
-	//     &comment.ID, &comment.Content, &comment.PostID,
-	//     &comment.AuthorID, &comment.CreatedAt, &comment.UpdatedAt,
-	// )
-	// if err != nil {
-	//     if err == sql.ErrNoRows {
-	//         return nil, ErrCommentNotFound
-	//     }
-	//     return nil, fmt.Errorf("failed to get comment: %w", err)
-	// }
-
-	_ = query // Удалите эту строку после реализации
-	return nil, fmt.Errorf("not implemented")
+	var c model.Comment
+	query := `SELECT id, content, post_id, author_id, created_at, updated_at FROM comments WHERE id = $1`
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&c.ID, &c.Content, &c.PostID, &c.AuthorID, &c.CreatedAt, &c.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrCommentNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get comment by id: %w", err)
+	}
+	return &c, nil
 }
 
 // GetByPostID получает комментарии к посту с пагинацией
 func (r *CommentRepo) GetByPostID(ctx context.Context, postID int, limit, offset int) ([]*model.Comment, error) {
-	// TODO: Реализовать получение комментариев к посту
-	// 1. Подготовить SQL запрос с WHERE post_id = $1
-	// 2. Добавить ORDER BY created_at ASC (комментарии по времени)
-	// 3. Добавить LIMIT и OFFSET для пагинации
-	// 4. Выполнить запрос и получить rows
-	// 5. Итерировать по rows и собрать массив комментариев
-	// 6. Не забудьте закрыть rows (defer rows.Close())
-	//
-	// HINT: Используйте QueryContext для получения множества записей
-	// Пример запроса:
-	// SELECT id, content, post_id, author_id, created_at, updated_at
-	// FROM comments
-	// WHERE post_id = $1
-	// ORDER BY created_at ASC
-	// LIMIT $2 OFFSET $3
 
+	// Получаем комментарии
 	query := `
 		SELECT id, content, post_id, author_id, created_at, updated_at
 		FROM comments
@@ -112,84 +73,121 @@ func (r *CommentRepo) GetByPostID(ctx context.Context, postID int, limit, offset
 		ORDER BY created_at ASC
 		LIMIT $2 OFFSET $3
 	`
+	rows, err := r.db.QueryContext(ctx, query, postID, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query comments: %w", err)
+	}
+	defer rows.Close()
 
-	// TODO: Выполнить запрос
-	// rows, err := r.db.QueryContext(ctx, query, postID, limit, offset)
-	// if err != nil {
-	//     return nil, fmt.Errorf("failed to get comments: %w", err)
-	// }
-	// defer rows.Close()
+	var comments []*model.Comment
+	for rows.Next() {
+		var c model.Comment
+		err := rows.Scan(&c.ID, &c.Content, &c.PostID, &c.AuthorID, &c.CreatedAt, &c.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan comment: %w", err)
+		}
+		comments = append(comments, &c)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate comments: %w", err)
+	}
 
-	// TODO: Итерировать по результатам
-	// var comments []*model.Comment
-	// for rows.Next() {
-	//     var comment model.Comment
-	//     err := rows.Scan(
-	//         &comment.ID, &comment.Content, &comment.PostID,
-	//         &comment.AuthorID, &comment.CreatedAt, &comment.UpdatedAt,
-	//     )
-	//     if err != nil {
-	//         return nil, fmt.Errorf("failed to scan comment: %w", err)
-	//     }
-	//     comments = append(comments, &comment)
-	// }
-	//
-	// if err = rows.Err(); err != nil {
-	//     return nil, fmt.Errorf("failed to iterate comments: %w", err)
-	// }
-	//
-	// return comments, nil
-
-	_ = query // Удалите эту строку после реализации
-	return nil, fmt.Errorf("not implemented")
+	return comments, nil
 }
 
 // GetCountByPostID получает количество комментариев к посту
 func (r *CommentRepo) GetCountByPostID(ctx context.Context, postID int) (int, error) {
-	// TODO: Реализовать подсчет комментариев к посту
-	// HINT: SELECT COUNT(*) FROM comments WHERE post_id = $1
-
 	query := `SELECT COUNT(*) FROM comments WHERE post_id = $1`
 
 	var count int
-	// TODO: Выполнить запрос
-	// err := r.db.QueryRowContext(ctx, query, postID).Scan(&count)
+	err := r.db.QueryRowContext(ctx, query, postID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count comments: %w", err)
+	}
 
-	_ = query // Удалите эту строку после реализации
-	return 0, fmt.Errorf("not implemented")
+	return count, nil
 }
 
 // Update обновляет комментарий
 func (r *CommentRepo) Update(ctx context.Context, comment *model.Comment) error {
-	// TODO: (Опционально) Реализовать обновление комментария
-	// 1. Обновить только content и updated_at
-	// 2. Использовать UPDATE comments SET content = $1, updated_at = $2 WHERE id = $3
-	// 3. Проверить RowsAffected
+	comment.UpdatedAt = time.Now()
 
 	query := `
 		UPDATE comments
 		SET content = $1, updated_at = $2
 		WHERE id = $3
 	`
+	res, err := r.db.ExecContext(ctx, query, comment.Content, comment.UpdatedAt, comment.ID)
+	if err != nil {
+		return fmt.Errorf("failed to update comment: %w", err)
+	}
 
-	comment.UpdatedAt = time.Now()
-
-	// TODO: Выполнить запрос
-
-	_ = query // Удалите эту строку после реализации
-	return fmt.Errorf("not implemented")
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if n == 0 {
+		return ErrCommentNotFound
+	}
+	return nil
 }
 
 // Delete удаляет комментарий
 func (r *CommentRepo) Delete(ctx context.Context, id int) error {
-	// TODO: (Опционально) Реализовать удаление комментария
-	// 1. DELETE FROM comments WHERE id = $1
-	// 2. Проверить RowsAffected
-
 	query := `DELETE FROM comments WHERE id = $1`
+	res, err := r.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete comment: %w", err)
+	}
 
-	// TODO: Выполнить запрос
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if n == 0 {
+		return ErrCommentNotFound
+	}
+	return nil
+}
 
-	_ = query // Удалите эту строку после реализации
-	return fmt.Errorf("not implemented")
+// ListByAuthor возвращает комментарии автора с пагинацией
+func (r *CommentRepo) ListByAuthor(ctx context.Context, authorID int, limit, offset int) ([]*model.Comment, error) {
+	query := `
+		SELECT id, content, post_id, author_id, created_at, updated_at
+		FROM comments
+		WHERE author_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+	rows, err := r.db.QueryContext(ctx, query, authorID, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query comments by author: %w", err)
+	}
+	defer rows.Close()
+
+	var comments []*model.Comment
+	for rows.Next() {
+		var c model.Comment
+		err := rows.Scan(&c.ID, &c.Content, &c.PostID, &c.AuthorID, &c.CreatedAt, &c.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan comment: %w", err)
+		}
+		comments = append(comments, &c)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate comments by author: %w", err)
+	}
+
+	return comments, nil
+}
+
+// CountByAuthor возвращает количество комментариев автора
+func (r *CommentRepo) CountByAuthor(ctx context.Context, authorID int) (int, error) {
+	query := `SELECT COUNT(*) FROM comments WHERE author_id = $1`
+	var count int
+	err := r.db.QueryRowContext(ctx, query, authorID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count comments by author: %w", err)
+	}
+	return count, nil
 }

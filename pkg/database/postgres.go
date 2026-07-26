@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	_ "github.com/lib/pq"
 )
@@ -17,76 +18,132 @@ type Config struct {
 	SSLMode  string
 }
 
+// GetDSN формирует строку подключения к PostgreSQL.
+func GetDSN(cfg Config) string {
+	return fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode,
+	)
+}
+
 // NewPostgresDB создает новое подключение к PostgreSQL
 func NewPostgresDB(cfg Config) (*sql.DB, error) {
-	// TODO: Реализовать подключение к PostgreSQL
-	// Шаги:
-	// 1. Сформировать строку подключения (DSN) из параметров конфигурации
-	// 2. Открыть соединение с БД используя sql.Open("postgres", dsn)
-	// 3. Проверить соединение методом Ping()
-	// 4. Настроить пул соединений (SetMaxOpenConns, SetMaxIdleConns)
-	// 5. Вернуть подключение или ошибку
+	dsn := GetDSN(cfg)
 
-	return nil, fmt.Errorf("not implemented")
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open connection: %w", err)
+	}
+
+	// Проверка соединения сразу после открытия
+	if err := CheckConnection(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	// Настройка пула соединений
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	return db, nil
 }
 
 // Migrate выполняет миграции базы данных
 func Migrate(db *sql.DB) error {
-	// TODO: Реализовать применение миграций
-	// Шаги:
-	// 1. Создать таблицу users если не существует
-	// 2. Создать таблицу posts если не существует
-	// 3. Создать таблицу comments если не существует
-	// 4. Создать необходимые индексы
-	// 5. Вернуть ошибку если что-то пошло не так
-	//
-	// Структура таблиц:
-	// - users: id, username, email, password_hash, created_at, updated_at
-	// - posts: id, title, content, author_id, created_at, updated_at
-	// - comments: id, content, post_id, author_id, created_at, updated_at
-
 	queries := []string{
-		// TODO: Добавить SQL запросы для создания таблиц
-		// Пример:
-		// `CREATE TABLE IF NOT EXISTS users (...)`,
-		// `CREATE TABLE IF NOT EXISTS posts (...)`,
-		// `CREATE TABLE IF NOT EXISTS comments (...)`,
-		// `CREATE INDEX IF NOT EXISTS ...`,
+		// Таблица users
+		`CREATE TABLE IF NOT EXISTS users (
+			id SERIAL PRIMARY KEY,
+			username VARCHAR(255) NOT NULL UNIQUE,
+			email VARCHAR(255) NOT NULL UNIQUE,
+			password_hash VARCHAR(255) NOT NULL,
+			created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+		)`,
+
+		// Таблица posts
+		`CREATE TABLE IF NOT EXISTS posts (
+			id SERIAL PRIMARY KEY,
+			title VARCHAR(255) NOT NULL,
+			content TEXT NOT NULL,
+			author_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+		)`,
+
+		// Таблица comments
+		`CREATE TABLE IF NOT EXISTS comments (
+			id SERIAL PRIMARY KEY,
+			content TEXT NOT NULL,
+			post_id INT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+			author_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+		)`,
+
+		// Индексы для ускорения выборки
+		`CREATE INDEX IF NOT EXISTS idx_posts_author_id ON posts(author_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_comments_post_id ON comments(post_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_comments_author_id ON comments(author_id)`,
 	}
 
-	// TODO: Выполнить каждый запрос в транзакции
-	_ = queries // Удалить после реализации
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
 
-	return fmt.Errorf("not implemented")
+	defer func() {
+		// Если функция завершится с ошибкой — откатываем транзакцию
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	for i, query := range queries {
+		_, err := tx.Exec(query)
+		if err != nil {
+			return fmt.Errorf("migration failed at step %d: %w", i, err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit migration: %w", err)
+	}
+
+	return nil
 }
 
 // CheckConnection проверяет соединение с базой данных
 func CheckConnection(db *sql.DB) error {
-	// TODO: Реализовать проверку соединения
-	// Использовать db.Ping() для проверки
-
-	return fmt.Errorf("not implemented")
-}
-
-// GetDSN формирует строку подключения к PostgreSQL
-func GetDSN(cfg Config) string {
-	// TODO: Сформировать DSN строку
-	// Формат: "host=%s port=%d user=%s password=%s dbname=%s sslmode=%s"
-
-	return ""
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("ping failed: %w", err)
+	}
+	return nil
 }
 
 // Close закрывает соединение с базой данных
 func Close(db *sql.DB) error {
-	// TODO: Корректно закрыть соединение
-
-	return fmt.Errorf("not implemented")
+	if db == nil {
+		return nil // Безопасный вызов, если db nil
+	}
+	err := db.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close database connection: %w", err)
+	}
+	return nil
 }
 
-// TestConnection выполняет тестовый запрос к БД (опциональное задание)
+// TestConnection выполняет тестовый запрос к БД (SELECT 1) для проверки работоспособности.
 func TestConnection(db *sql.DB) error {
-	// TODO: Выполнить простой запрос для проверки работы БД
-	// Например: SELECT 1
-
-	return fmt.Errorf("not implemented")
+	var result int
+	row := db.QueryRow("SELECT 1")
+	err := row.Scan(&result)
+	if err != nil {
+		return fmt.Errorf("test query failed: %w", err)
+	}
+	if result != 1 {
+		return fmt.Errorf("unexpected test query result: %d, expected 1", result)
+	}
+	return nil
 }

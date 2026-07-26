@@ -1,132 +1,223 @@
 package middleware
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"net/http"
+	"runtime/debug"
+	"strings"
+	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
-// LoggingMiddleware provides request logging, CORS, recovery and other utility middleware
+// contextKey — кастомный тип для ключей контекста, чтобы избежать коллизий
+type contextKey string
+
+const (
+	RequestIDKey contextKey = "requestID"
+)
+
+// LoggingMiddleware предоставляет утилиты: логирование, CORS, recovery, request ID и т.д.
 type LoggingMiddleware struct {
 	logger *log.Logger
 }
 
-// NewLoggingMiddleware creates a new logging middleware instance
+// NewLoggingMiddleware создаёт новый экземпляр middleware
 func NewLoggingMiddleware(logger *log.Logger) *LoggingMiddleware {
 	return &LoggingMiddleware{
 		logger: logger,
 	}
 }
 
-// Logger logs all HTTP requests
+// Logger логирует все HTTP-запросы с временем выполнения и статусом
 func (m *LoggingMiddleware) Logger(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Реализовать логирование запросов
-		// Шаги:
-		// 1. Засечь время начала запроса
-		// 2. Создать wrapper для ResponseWriter чтобы захватить статус код
-		// 3. Вызвать следующий handler с wrapped writer
-		// 4. После выполнения залогировать: метод, путь, IP, статус, время выполнения
+		start := time.Now()
 
-		// Временная реализация
-		next(w, r)
+		// Получаем RequestID из контекста (если он уже был добавлен, например, в RequestID middleware)
+		reqID, _ := GetRequestIDFromContext(r.Context())
+		if reqID == "" {
+			reqID = uuid.New().String()
+		}
+
+		rw := newResponseWriter(w)
+		next(rw, r.WithContext(context.WithValue(r.Context(), RequestIDKey, reqID)))
+
+		duration := time.Since(start)
+		ip := getClientIP(r)
+
+		m.logger.Printf("[%s] %s %s | IP: %s | Status: %d | Duration: %v",
+			reqID,
+			r.Method,
+			r.URL.Path,
+			ip,
+			rw.statusCode,
+			duration,
+		)
 	}
 }
 
-// Recovery восстанавливается после паник
+// Добавь этот метод в internal/middleware/middleware.go
+func (m *LoggingMiddleware) Chain() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		// Порядок важен: CORS → RequestID → Logger → Recovery
+		h := http.HandlerFunc(m.CORS(next.ServeHTTP))
+		h = http.HandlerFunc(m.RequestID(h.ServeHTTP))
+		h = http.HandlerFunc(m.Logger(h.ServeHTTP))
+		h = http.HandlerFunc(m.Recovery(h.ServeHTTP))
+
+		return h
+	}
+}
+
+// Recovery перехватывает паники и возвращает 500, логируя стек
 func (m *LoggingMiddleware) Recovery(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Реализовать восстановление после паник
-		// Шаги:
-		// 1. Использовать defer с recover() для перехвата паник
-		// 2. При панике залогировать ошибку
-		// 3. Опционально: добавить stack trace
-		// 4. Вернуть клиенту 500 Internal Server Error
-		// 5. Вызвать следующий handler
+		defer func() {
+			if v := recover(); v != nil {
+				reqID, _ := GetRequestIDFromContext(r.Context())
 
-		// Временная реализация
+				stack := string(debug.Stack())
+				msg := fmt.Sprintf("panic recovered: %v\nstack:\n%s", r, stack)
+
+				m.logger.Printf("[%s] PANIC: %s", reqID, msg)
+
+				// Безопасный ответ клиенту: не отдаём стек, только общую ошибку
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			}
+		}()
+
 		next(w, r)
 	}
 }
 
-// CORS добавляет CORS заголовки
+// CORS добавляет CORS-заголовки и обрабатывает preflight (OPTIONS)
 func (m *LoggingMiddleware) CORS(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Реализовать CORS заголовки
-		// Шаги:
-		// 1. Добавить необходимые CORS заголовки (Origin, Methods, Headers, Max-Age)
-		// 2. Обработать preflight запросы (OPTIONS метод) - вернуть 204
-		// 3. Для остальных методов вызвать следующий handler
+		origin := r.Header.Get("Origin")
+		// В продакшене лучше проверять origin по списку разрешённых доменов
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Max-Age", "3600")
 
-		// Временная реализация
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
 		next(w, r)
 	}
 }
 
-// RequestID добавляет уникальный ID к каждому запросу
+// RequestID генерирует уникальный ID запроса, кладёт в контекст и добавляет в заголовок ответа
 func (m *LoggingMiddleware) RequestID(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Реализовать генерацию Request ID
-		// Шаги:
-		// 1. Сгенерировать уникальный ID (UUID или timestamp+random)
-		// 2. Добавить ID в контекст запроса для использования в логах
-		// 3. Добавить ID в заголовок ответа X-Request-ID
-		// 4. Залогировать запрос с Request ID
-		// 5. Вызвать следующий handler
+		reqID := uuid.New().String()
 
-		// Временная реализация
+		ctx := context.WithValue(r.Context(), RequestIDKey, reqID)
+		r = r.WithContext(ctx)
+
+		w.Header().Set("X-Request-ID", reqID)
+
 		next(w, r)
 	}
 }
 
-// RateLimiter ограничивает количество запросов от одного клиента
+// RateLimiter — простая реализация rate limiting по IP (в памяти, без persistence)
+// Для продакшена лучше использовать Redis или отдельное хранилище
 func (m *LoggingMiddleware) RateLimiter(maxRequests int, window time.Duration) func(http.HandlerFunc) http.HandlerFunc {
-	// TODO: Реализовать rate limiting (продвинутое задание)
-	// Шаги:
-	// 1. Создать хранилище для отслеживания запросов по IP адресам
-	// 2. Использовать mutex для безопасного доступа к хранилищу
-	// 3. Для каждого запроса:
-	//    - Получить IP клиента
-	//    - Проверить количество запросов в текущем окне времени
-	//    - Если превышен лимит - вернуть 429 Too Many Requests
-	//    - Иначе увеличить счетчик и пропустить запрос
+	type limiterState struct {
+		count     int
+		lastReset time.Time
+	}
+
+	// Хранилище: IP -> состояние
+	store := make(map[string]*limiterState)
+	mu := &sync.Mutex{} // нужно добавить import "sync"
 
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			defer mu.Unlock()
 
-			// Временная реализация
+			now := time.Now()
+			ip := getClientIP(r)
+			state, ok := store[ip]
+
+			if !ok {
+				state = &limiterState{
+					count:     1,
+					lastReset: now,
+				}
+				store[ip] = state
+				next(w, r)
+				return
+			}
+
+			// Если окно времени истекло — сбрасываем счётчик
+			if now.Sub(state.lastReset) >= window {
+				state.count = 1
+				state.lastReset = now
+				next(w, r)
+				return
+			}
+
+			// Окно ещё не истекло: проверяем лимит
+			if state.count >= maxRequests {
+				m.logger.Printf("Rate limit exceeded for IP: %s", ip)
+				http.Error(w, "Too many requests", http.StatusTooManyRequests)
+				return
+			}
+
+			state.count++
 			next(w, r)
 		}
 	}
 }
 
-// ContentTypeJSON устанавливает Content-Type: application/json для всех ответов
+// ContentTypeJSON принудительно ставит Content-Type: application/json для всех ответов
 func (m *LoggingMiddleware) ContentTypeJSON(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Установить Content-Type: application/json для всех ответов
-
-		// Временная реализация
+		w.Header().Set("Content-Type", "application/json")
 		next(w, r)
 	}
 }
 
-// getClientIP извлекает IP адрес клиента
+// getClientIP извлекает реальный IP клиента с учётом прокси
 func getClientIP(r *http.Request) string {
-	// TODO: Извлечь реальный IP адрес клиента
-	// Проверить заголовки: X-Forwarded-For, X-Real-IP, затем RemoteAddr
-	// Учесть что X-Forwarded-For может содержать несколько IP
+	// X-Forwarded-For: client, proxy1, proxy2
+	forwarded := r.Header.Get("X-Forwarded-For")
+	if forwarded != "" {
+		parts := strings.Split(forwarded, ",")
+		if len(parts) > 0 {
+			return strings.TrimSpace(parts[0])
+		}
+	}
 
-	return r.RemoteAddr
+	xRealIP := r.Header.Get("X-Real-IP")
+	if xRealIP != "" {
+		return xRealIP
+	}
+
+	// Fallback: RemoteAddr (может быть в формате ip:port)
+	addr := r.RemoteAddr
+	if idx := strings.LastIndex(addr, ":"); idx != -1 {
+		addr = addr[:idx]
+	}
+	return addr
 }
 
-// responseWriter обертка для захвата статус кода
+// responseWriter — обёртка для перехвата статус-кода
 type responseWriter struct {
 	http.ResponseWriter
 	statusCode int
 	written    bool
 }
 
-// WriteHeader сохраняет статус код
 func (rw *responseWriter) WriteHeader(code int) {
 	if !rw.written {
 		rw.statusCode = code
@@ -135,7 +226,6 @@ func (rw *responseWriter) WriteHeader(code int) {
 	}
 }
 
-// Write вызывает WriteHeader если еще не был вызван
 func (rw *responseWriter) Write(b []byte) (int, error) {
 	if !rw.written {
 		rw.WriteHeader(http.StatusOK)
@@ -143,11 +233,16 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return rw.ResponseWriter.Write(b)
 }
 
-// newResponseWriter создает новую обертку
 func newResponseWriter(w http.ResponseWriter) *responseWriter {
 	return &responseWriter{
 		ResponseWriter: w,
 		statusCode:     http.StatusOK,
 		written:        false,
 	}
+}
+
+// GetRequestIDFromContext извлекает RequestID из контекста
+func GetRequestIDFromContext(ctx context.Context) (string, bool) {
+	val, ok := ctx.Value(RequestIDKey).(string)
+	return val, ok
 }

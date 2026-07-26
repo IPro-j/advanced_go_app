@@ -64,7 +64,10 @@ type CommentCreateRequest struct {
 	Content string `json:"content" validate:"required,min=1,max=1000"`
 }
 
-// TODO: Добавить следующие структуры и методы:
+// CommentUpdateRequest представляет запрос на обновление комментария
+type CommentUpdateRequest struct {
+	Content string `json:"content" validate:"required,min=1,max=1000"`
+}
 
 // UserResponse - структура для ответа с данными пользователя (без пароля)
 // Поля: ID, Username, Email, CreatedAt

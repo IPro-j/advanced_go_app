@@ -6,11 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 var (
 	ErrCommentNotFound = errors.New("comment not found")
 	ErrPostNotExists   = errors.New("post does not exist")
+	//ErrForbidden       = errors.New("forbidden")
 )
 
 type CommentService struct {
@@ -31,89 +33,198 @@ func NewCommentService(
 	}
 }
 
-func (s *CommentService) Create(ctx context.Context, userID int, req *model.CommentCreateRequest) (*model.Comment, error) {
-	// TODO: Создать новый комментарий
-	// Шаги:
-	// 1. Валидация данных (content не пустой и <= 1000 символов)
-	// 2. Проверить что пост существует
-	// 3. Создать модель комментария с userID как автором
-	// 4. Сохранить через репозиторий
-	// 5. Опционально: обогатить ответ информацией об авторе
-	// 6. Вернуть созданный комментарий
+// Create создаёт новый комментарий к посту
+func (s *CommentService) Create(ctx context.Context, postID, userID int, req *model.CommentCreateRequest) (*model.Comment, error) {
+	if err := validateCommentCreateRequest(req); err != nil {
+		return nil, err
+	}
 
-	return nil, fmt.Errorf("not implemented")
+	// 1. Проверяем, что пост существует
+	_, err := s.postRepo.GetByID(ctx, postID)
+	if err != nil {
+		if errors.Is(err, repository.ErrPostNotFound) {
+			return nil, ErrPostNotExists // 404
+		}
+		return nil, fmt.Errorf("failed to check post existence: %w", err)
+	}
+
+	comment := &model.Comment{
+		Content:  strings.TrimSpace(req.Content),
+		PostID:   postID,
+		AuthorID: userID,
+	}
+
+	if err := s.commentRepo.Create(ctx, comment); err != nil {
+		return nil, fmt.Errorf("failed to create comment: %w", err)
+	}
+
+	return comment, nil
 }
 
+// GetByID получает комментарий по ID
 func (s *CommentService) GetByID(ctx context.Context, id int) (*model.Comment, error) {
-	// TODO: Получить комментарий по ID
-	// Шаги:
-	// 1. Получить комментарий через репозиторий
-	// 2. Опционально: добавить информацию об авторе
-	// 3. Вернуть результат или ErrCommentNotFound
-
-	return nil, fmt.Errorf("not implemented")
+	comment, err := s.commentRepo.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, repository.ErrCommentNotFound) {
+			return nil, ErrCommentNotFound
+		}
+		return nil, fmt.Errorf("failed to get comment by ID: %w", err)
+	}
+	return comment, nil
 }
 
+// GetByPost получает комментарии к посту с пагинацией
 func (s *CommentService) GetByPost(ctx context.Context, postID int, limit, offset int) ([]*model.Comment, int, error) {
-	// TODO: Получить комментарии к посту с пагинацией
-	// Шаги:
-	// 1. Валидировать параметры пагинации (limit по умолчанию 20, максимум 100)
-	// 2. Опционально: проверить существование поста
-	// 3. Получить комментарии через репозиторий
-	// 4. Получить общее количество для пагинации
-	// 5. Опционально: обогатить данные информацией об авторах
-	// 6. Вернуть комментарии и общее количество
+	const (
+		defaultLimit = 20
+		maxLimit     = 100
+	)
 
-	return nil, 0, fmt.Errorf("not implemented")
+	if limit <= 0 {
+		limit = defaultLimit
+	} else if limit > maxLimit {
+		limit = maxLimit
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Опционально: проверка существования поста
+	_, err := s.postRepo.GetByID(ctx, postID)
+	if err != nil {
+		if errors.Is(err, repository.ErrPostNotFound) {
+			return nil, 0, ErrPostNotExists
+		}
+		return nil, 0, fmt.Errorf("failed to check post existence for comments: %w", err)
+	}
+
+	comments, err := s.commentRepo.GetByPostID(ctx, postID, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list comments by post: %w", err)
+	}
+
+	total, err := s.commentRepo.GetCountByPostID(ctx, postID)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count comments by post: %w", err)
+	}
+
+	return comments, total, nil
 }
 
+// Update обновляет комментарий (только content)
 func (s *CommentService) Update(ctx context.Context, id int, userID int, req *model.CommentUpdateRequest) (*model.Comment, error) {
-	// TODO: Обновить комментарий
-	// Шаги:
-	// 1. Найти существующий комментарий
-	// 2. Проверить что userID является автором (иначе ErrForbidden)
-	// 3. Валидировать новый content
-	// 4. Обновить content и временную метку
-	// 5. Сохранить через репозиторий
-	// 6. Опционально: добавить информацию об авторе
-	// 7. Вернуть обновленный комментарий
+	comment, err := s.commentRepo.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, repository.ErrCommentNotFound) {
+			return nil, ErrCommentNotFound
+		}
+		return nil, fmt.Errorf("failed to get comment for update: %w", err)
+	}
 
-	return nil, fmt.Errorf("not implemented")
+	if comment.AuthorID != userID {
+		return nil, ErrForbidden
+	}
+
+	if err := validateCommentUpdateRequest(req); err != nil {
+		return nil, err
+	}
+
+	comment.Content = strings.TrimSpace(req.Content)
+	// updated_at обновится внутри репозитория
+
+	if err := s.commentRepo.Update(ctx, comment); err != nil {
+		if errors.Is(err, repository.ErrCommentNotFound) {
+			return nil, ErrCommentNotFound
+		}
+		return nil, fmt.Errorf("failed to update comment: %w", err)
+	}
+
+	return comment, nil
 }
 
+// Delete удаляет комментарий
 func (s *CommentService) Delete(ctx context.Context, id int, userID int) error {
-	// TODO: Удалить комментарий
-	// Шаги:
-	// 1. Найти комментарий и проверить существование
-	// 2. Проверить что userID является автором
-	// 3. Удалить через репозиторий
-	// 4. Вернуть соответствующую ошибку при неудаче
+	comment, err := s.commentRepo.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, repository.ErrCommentNotFound) {
+			return ErrCommentNotFound
+		}
+		return fmt.Errorf("failed to get comment for delete: %w", err)
+	}
 
-	return fmt.Errorf("not implemented")
-}
+	if comment.AuthorID != userID {
+		return ErrForbidden
+	}
 
-func (s *CommentService) GetByAuthor(ctx context.Context, authorID int, limit, offset int) ([]*model.Comment, int, error) {
-	// TODO: Получить комментарии конкретного автора
-	// Шаги:
-	// 1. Валидировать параметры пагинации
-	// 2. Получить комментарии автора через репозиторий
-	// 3. Получить общее количество комментариев автора
-	// 4. Опционально: добавить информацию об авторе
-	// 5. Вернуть результат с общим количеством
-
-	return nil, 0, fmt.Errorf("not implemented")
-}
-
-// validateCommentCreateRequest проверяет корректность данных для создания комментария
-func validateCommentCreateRequest(req *model.CommentCreateRequest) error {
-	// TODO: Реализовать валидацию content и PostID
+	if err := s.commentRepo.Delete(ctx, id); err != nil {
+		if errors.Is(err, repository.ErrCommentNotFound) {
+			return ErrCommentNotFound
+		}
+		return fmt.Errorf("failed to delete comment: %w", err)
+	}
 
 	return nil
 }
 
-// validateCommentUpdateRequest проверяет корректность данных для обновления комментария
+// GetByAuthor получает комментарии конкретного автора с пагинацией
+// Для этой функции в репозитории должны быть ListByAuthor и CountByAuthor.
+// Если их ещё нет — напиши, я дам реализацию.
+func (s *CommentService) GetByAuthor(ctx context.Context, authorID int, limit, offset int) ([]*model.Comment, int, error) {
+	const (
+		defaultLimit = 20
+		maxLimit     = 100
+	)
+
+	if limit <= 0 {
+		limit = defaultLimit
+	} else if limit > maxLimit {
+		limit = maxLimit
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	comments, err := s.commentRepo.ListByAuthor(ctx, authorID, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list comments by author: %w", err)
+	}
+
+	total, err := s.commentRepo.CountByAuthor(ctx, authorID)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count comments by author: %w", err)
+	}
+
+	return comments, total, nil
+}
+
+func validateCommentCreateRequest(req *model.CommentCreateRequest) error {
+	if req == nil {
+		return errors.New("request cannot be nil")
+	}
+
+	content := strings.TrimSpace(req.Content)
+	if len(content) == 0 {
+		return errors.New("content is required")
+	}
+	if len(content) > 1000 {
+		return errors.New("content must be no more than 1000 characters")
+	}
+
+	return nil
+}
+
 func validateCommentUpdateRequest(req *model.CommentUpdateRequest) error {
-	// TODO: Реализовать валидацию content
+	if req == nil {
+		return errors.New("request cannot be nil")
+	}
+
+	content := strings.TrimSpace(req.Content)
+	if len(content) == 0 {
+		return errors.New("content cannot be empty")
+	}
+	if len(content) > 1000 {
+		return errors.New("content must be no more than 1000 characters")
+	}
 
 	return nil
 }
