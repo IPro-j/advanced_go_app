@@ -1,22 +1,18 @@
 package handler
 
 import (
-	"blog-api/internal/middleware"
+	//"blog-api/internal/middleware"
 	"blog-api/internal/model"
 	"blog-api/internal/service"
+	"blog-api/pkg/apperr"
 	"blog-api/pkg/auth"
-	"context"
+
+	//"context"
 	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
-	//	"github.com/gorilla/mux" // если используешь mux; если нет — можно убрать
 )
-
-// ErrorResponse — структура для единообразного формата ошибок
-type ErrorResponse struct {
-	Error string `json:"error"`
-}
 
 // AuthTokenResponse — ответ с токенами (access + refresh)
 type AuthTokenResponse struct {
@@ -60,9 +56,16 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	user, err := h.userService.Register(r.Context(), &req)
 	if err != nil {
 		// Проверяем конкретную ошибку дубликата
-		if errors.Is(err, service.ErrUserAlreadyExists) {
+		if errors.Is(err, apperr.ErrUserAlreadyExists) {
 			writeError(w, "user already exists", http.StatusConflict)
 			return
+
+		}
+
+		if errors.Is(err, apperr.ErrEmailAlreadyExists) {
+			writeError(w, "email already exists", http.StatusConflict)
+			return
+
 		}
 
 		// Для остальных ошибок лучше логировать детали (но не отдавать клиенту)
@@ -76,12 +79,6 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "failed to generate access token", http.StatusInternalServerError)
 		return
 	}
-
-	//refreshToken, err := h.jwtManager.GenerateToken(user.User.ID, user.User.Email, user.User.Username)
-	//if err != nil {
-	//	writeError(w, "failed to generate refresh token", http.StatusInternalServerError)
-	//	return
-	//}
 
 	resp := AuthTokenResponse{
 		AccessToken: accessToken,
@@ -114,10 +111,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.userService.Login(r.Context(), &req)
 	if err != nil {
-		if errors.Is(err, service.ErrInvalidCredentials) {
-			writeError(w, "invalid credentials", http.StatusUnauthorized)
-			return
-		}
+		//ошибка общая для email/password
 		writeError(w, "login failed", http.StatusInternalServerError)
 		return
 	}
@@ -136,51 +130,4 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
-}
-
-// GetProfile возвращает профиль текущего пользователя
-// GET /api/profile (пример маршрута)
-func (h *AuthHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
-	// Предполагается, что AuthMiddleware уже положил userID в контекст
-	userID, ok := getUserIDFromContext(r.Context())
-	if !ok {
-		writeError(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	user, err := h.userService.GetByID(r.Context(), userID)
-	if err != nil {
-		// Если пользователь вдруг не найден (например, удалён)
-		writeError(w, "user not found", http.StatusNotFound)
-		return
-	}
-
-	profile := map[string]interface{}{
-		"id":         user.ID,
-		"username":   user.Username,
-		"email":      user.Email,
-		"created_at": user.CreatedAt,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(profile)
-}
-
-// writeError отправляет JSON-ответ с ошибкой
-func writeError(w http.ResponseWriter, message string, statusCode int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	_ = json.NewEncoder(w).Encode(ErrorResponse{Error: message})
-}
-
-// getUserIDFromContext извлекает userID из контекста
-func getUserIDFromContext(ctx context.Context) (int, bool) {
-	val, ok := ctx.Value(middleware.UserIDKey).(int)
-	return val, ok
-}
-
-// getUserIDFromContext извлекает userID из контекста
-func getPostIDFromContext(ctx context.Context) (int, bool) {
-	val, ok := ctx.Value(middleware.PostIDKey).(int)
-	return val, ok
 }

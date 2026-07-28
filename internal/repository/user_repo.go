@@ -125,7 +125,7 @@ func (r *UserRepo) ExistsByUsername(ctx context.Context, username string) (bool,
 // В этой реализации обновляются username, email и password.
 // ВАЖНО: в реальном проекте пароль не стоит передавать как есть — его нужно хешировать ДО вызова Update
 // (обычно это делается в сервисе). Здесь мы просто сохраняем переданное значение.
-func (r *UserRepo) Update(ctx context.Context, user *model.User) error {
+/*func (r *UserRepo) Update(ctx context.Context, user *model.User) error {
 	user.UpdatedAt = time.Now()
 
 	query := `
@@ -155,8 +155,10 @@ func (r *UserRepo) Update(ctx context.Context, user *model.User) error {
 
 	return nil
 }
+*/
 
 // Delete удаляет пользователя
+/*
 func (r *UserRepo) Delete(ctx context.Context, id int) error {
 	query := `DELETE FROM users WHERE id = $1`
 
@@ -177,3 +179,4 @@ func (r *UserRepo) Delete(ctx context.Context, id int) error {
 
 	return nil
 }
+*/

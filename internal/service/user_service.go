@@ -3,20 +3,14 @@ package service
 import (
 	"blog-api/internal/model"
 	"blog-api/internal/repository"
+	"blog-api/pkg/apperr"
 	"blog-api/pkg/auth"
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
-)
-
-var (
-	ErrUserAlreadyExists  = errors.New("user already exists")
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrUserNotFound       = errors.New("user not found")
 )
 
 type UserService struct {
@@ -39,22 +33,22 @@ func (s *UserService) Register(ctx context.Context, req *model.UserCreateRequest
 		return nil, err
 	}
 
-	// 2. Проверка уникальности email
-	exists, err := s.userRepo.ExistsByEmail(ctx, req.Email)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check email existence: %w", err)
-	}
-	if exists {
-		return nil, ErrUserAlreadyExists
-	}
-
 	// 3. Проверка уникальности username
-	exists, err = s.userRepo.ExistsByUsername(ctx, req.Username)
+	exists, err := s.userRepo.ExistsByUsername(ctx, req.Username)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check username existence: %w", err)
 	}
 	if exists {
-		return nil, ErrUserAlreadyExists
+		return nil, apperr.ErrUserAlreadyExists
+	}
+
+	// 2. Проверка уникальности email
+	exists, err = s.userRepo.ExistsByEmail(ctx, req.Email)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check email existence: %w", err)
+	}
+	if exists {
+		return nil, apperr.ErrEmailAlreadyExists
 	}
 
 	// 4. Хеширование пароля
@@ -105,21 +99,16 @@ func (s *UserService) Login(ctx context.Context, req *model.UserLoginRequest) (*
 	// 2. Поиск пользователя по email
 	user, err := s.userRepo.GetByEmail(ctx, req.Email)
 	if err != nil {
-		if errors.Is(err, ErrUserNotFound) {
+		if errors.Is(err, apperr.ErrUserNotFound) {
 			// Не раскрываем, что именно не найдено: email или пользователь
-			fmt.Println("Email err")
-			return nil, ErrInvalidCredentials
+			return nil, apperr.ErrInvalidCredentials
 		}
 		return nil, fmt.Errorf("failed to get user by email: %w", err)
 	}
 
 	// 3. Проверка пароля (bcrypt)
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		fmt.Println("Passw err")
-		fmt.Println([]byte(req.Password))
-		fmt.Println([]byte(user.Password))
-		fmt.Println(user.Email)
-		return nil, ErrInvalidCredentials
+		return nil, apperr.ErrInvalidCredentials
 	}
 
 	// 4. Генерация JWT токенов
@@ -165,8 +154,7 @@ func validateUserCreateRequest(req *model.UserCreateRequest) error {
 		return errors.New("email is required")
 	}
 
-	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-	if !emailRegex.MatchString(email) {
+	if !isValidEmail(req.Email) {
 		return errors.New("invalid email format")
 	}
 
@@ -184,14 +172,13 @@ func validateUserLoginRequest(req *model.UserLoginRequest) error {
 	}
 
 	email := strings.TrimSpace(req.Email)
-	password := req.Password
+	password := strings.TrimSpace(req.Password)
 
 	if len(email) == 0 {
 		return errors.New("email is required")
 	}
 
-	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-	if !emailRegex.MatchString(email) {
+	if !isValidEmail(req.Email) {
 		return errors.New("invalid email format")
 	}
 

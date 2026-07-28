@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"blog-api/internal/handler"
-	"blog-api/internal/middleware" // твой кастомный middleware
+	"blog-api/internal/middleware"
 	"blog-api/internal/repository"
 	"blog-api/internal/service"
 	"blog-api/pkg/auth"
@@ -71,14 +71,12 @@ func main() {
 	authMW := middleware.NewAuthMiddleware(jwtManager)
 
 	router := chi.NewRouter()
-	//router.Use(loggingMW.Chain())
 
-	// --- ВАЖНО: подключаем твой middleware через экземпляр ---
 	// Добавляем цепочку: CORS → RequestID → Logger → Recovery
 	router.Use(loggingMW.Chain())
 
 	// Health check
-	router.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {
+	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok","service":"blog-api"}`))
@@ -91,7 +89,11 @@ func main() {
 		r.Post("/register", authHandler.Register)
 		r.Post("/login", authHandler.Login)
 		r.Get("/posts", postHandler.GetAll)
-		// другие публичные...
+		// Эндпоинт: GET /api/posts/{id} — получить один пост
+		r.Get("/posts/{id}", postHandler.GetByID)
+
+		// Эндпоинт: GET /api/posts/{id}/comments — комментарии к посту (с пагинацией)
+		r.Get("/posts/{id}/comments", commentHandler.GetByPost)
 
 		// Защищённая зона: применяем middleware
 		// --- Защищённая группа ---
@@ -105,7 +107,7 @@ func main() {
 
 			pr.Post("/posts/{id}/comments", commentHandler.Create)
 			pr.Put("/comments/{id}", commentHandler.Update)
-			//pr.Delete("/comments/{id}", commentHandler.Delete)
+			pr.Delete("/comments/{id}", commentHandler.Delete)
 		})
 	})
 
@@ -140,7 +142,7 @@ func loadConfig() *Config {
 		DBPassword:      getEnv("DB_PASSWORD", "password"),
 		DBName:          getEnv("DB_NAME", "blog_db"),
 		DBSSLMode:       getEnv("DB_SSLMODE", "disable"),
-		JWTSecret:       getEnv("JWT_SECRET", "supersecretkey"),
+		JWTSecret:       getEnv("JWT_SECRET", ""),
 		JWTExpiryHours:  getEnvAsInt("JWT_EXPIRY_HOURS", 24),
 		CacheTTLMinutes: getEnvAsInt("CACHE_TTL_MINUTES", 60),
 	}

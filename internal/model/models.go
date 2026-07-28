@@ -139,6 +139,3 @@ func (c *Comment) CanBeEditedBy(userID int) bool {
 func (c *Comment) CanBeDeletedBy(userID int) bool {
 	return c.AuthorID == userID
 }
-
-// HINT: Пользователь может редактировать/удалять только свои посты и комментарии
-// (сравните AuthorID с переданным userID)

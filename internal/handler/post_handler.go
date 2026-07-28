@@ -3,10 +3,13 @@ package handler
 import (
 	"blog-api/internal/model"
 	"blog-api/internal/service"
+	"blog-api/pkg/apperr"
 	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type PostHandler struct {
@@ -18,36 +21,6 @@ func NewPostHandler(postService *service.PostService) *PostHandler {
 		postService: postService,
 	}
 }
-
-// writeError отправляет JSON-ответ с ошибкой
-//func writeError(w http.ResponseWriter, message string, statusCode int) {
-//	w.Header().Set("Content-Type", "application/json")
-//w.WriteHeader(statusCode)
-//_ = json.NewEncoder(w).Encode(ErrorResponse{Error: message})
-//}
-
-// getUserIDFromContext извлекает userID из контекста
-//func getUserIDFromContext(ctx context.Context) (int, bool) {
-//	val, ok := ctx.Value(middleware.UserIDKey).(int)
-//	return val, ok
-//}
-
-// extractIDFromPath извлекает ID из пути URL
-//func extractIDFromPath(path, prefix string) string {
-//	if !strings.HasPrefix(path, prefix) {
-//		return ""
-//	}
-//	suffix := strings.TrimPrefix(path, prefix)
-//	if strings.HasPrefix(suffix, "/") {
-//		suffix = strings.TrimPrefix(suffix, "/")
-//	}
-// Если дальше есть ещё слеш (например, /api/posts/123/comments), обрезаем после первого числа
-//	idx := strings.Index(suffix, "/")
-//	if idx != -1 {
-//		suffix = suffix[:idx]
-//	}
-//	return suffix
-//}
 
 // Create обрабатывает создание нового поста
 func (h *PostHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -83,28 +56,24 @@ func (h *PostHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // GetByID возвращает пост по ID
 func (h *PostHandler) GetByID(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeError(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	idStr := extractIDFromPath(r.URL.Path, "/api/posts/")
+	idStr := chi.URLParam(r, "id")
 	if idStr == "" {
-		writeError(w, "invalid post ID path", http.StatusBadRequest)
+		writeError(w, "missing post id", http.StatusBadRequest)
 		return
 	}
 
 	id, err := strconv.Atoi(idStr)
 	if err != nil || id <= 0 {
-		writeError(w, "invalid post ID", http.StatusBadRequest)
+		writeError(w, "invalid post id", http.StatusBadRequest)
 		return
 	}
 
 	post, err := h.postService.GetByID(r.Context(), id)
 	if err != nil {
-		if err == service.ErrPostNotFound {
+		if err == apperr.ErrPostNotFound {
 			writeError(w, "post not found", http.StatusNotFound)
 		} else {
+			log.Printf("GetByID error: %v", err)
 			writeError(w, "failed to get post", http.StatusInternalServerError)
 		}
 		return
@@ -159,26 +128,21 @@ func (h *PostHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 
 // Update обновляет пост
 func (h *PostHandler) Update(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
-		writeError(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	userID, ok := getUserIDFromContext(r.Context())
 	if !ok {
 		writeError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	idStr := extractIDFromPath(r.URL.Path, "/api/protected/posts/")
+	idStr := chi.URLParam(r, "id")
 	if idStr == "" {
-		writeError(w, "invalid post ID path", http.StatusBadRequest)
+		writeError(w, "missing post id", http.StatusBadRequest)
 		return
 	}
 
 	id, err := strconv.Atoi(idStr)
 	if err != nil || id <= 0 {
-		writeError(w, "invalid post ID", http.StatusBadRequest)
+		writeError(w, "invalid post id", http.StatusBadRequest)
 		return
 	}
 
@@ -191,11 +155,12 @@ func (h *PostHandler) Update(w http.ResponseWriter, r *http.Request) {
 	post, err := h.postService.Update(r.Context(), id, userID, &req)
 	if err != nil {
 		switch err {
-		case service.ErrPostNotFound:
+		case apperr.ErrPostNotFound:
 			writeError(w, "post not found", http.StatusNotFound)
-		case service.ErrForbidden:
+		case apperr.ErrForbidden:
 			writeError(w, "you can only update your own posts", http.StatusForbidden)
 		default:
+			log.Printf("Update post error: %v", err)
 			writeError(w, "failed to update post", http.StatusInternalServerError)
 		}
 		return
@@ -208,63 +173,52 @@ func (h *PostHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Delete удаляет пост
 func (h *PostHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		writeError(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	userID, ok := getUserIDFromContext(r.Context())
 	if !ok {
 		writeError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	idStr := extractIDFromPath(r.URL.Path, "/api/protected/posts/")
+	idStr := chi.URLParam(r, "id")
 	if idStr == "" {
-		writeError(w, "invalid post ID path", http.StatusBadRequest)
+		writeError(w, "missing post id", http.StatusBadRequest)
 		return
 	}
 
 	id, err := strconv.Atoi(idStr)
 	if err != nil || id <= 0 {
-		writeError(w, "invalid post ID", http.StatusBadRequest)
+		writeError(w, "invalid post id", http.StatusBadRequest)
 		return
 	}
 
 	err = h.postService.Delete(r.Context(), id, userID)
 	if err != nil {
 		switch err {
-		case service.ErrPostNotFound:
+		case apperr.ErrPostNotFound:
 			writeError(w, "post not found", http.StatusNotFound)
-		case service.ErrForbidden:
+		case apperr.ErrForbidden:
 			writeError(w, "you can only delete your own posts", http.StatusForbidden)
 		default:
+			log.Printf("Delete post error: %v", err)
 			writeError(w, "failed to delete post", http.StatusInternalServerError)
 		}
 		return
 	}
 
-	// Успешное удаление — 204 No Content, тело не возвращаем
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // GetByAuthor возвращает посты конкретного автора
 func (h *PostHandler) GetByAuthor(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeError(w, "method not allowed", http.StatusMethodNotAllowed)
+	authorIDStr := chi.URLParam(r, "author_id") // нужно, чтобы в роуте было {author_id}
+	if authorIDStr == "" {
+		writeError(w, "missing author id", http.StatusBadRequest)
 		return
 	}
 
-	// Путь вида: /api/posts/author/123
-	idStr := extractIDFromPath(r.URL.Path, "/api/posts/author/")
-	if idStr == "" {
-		writeError(w, "invalid author ID path", http.StatusBadRequest)
-		return
-	}
-
-	authorID, err := strconv.Atoi(idStr)
+	authorID, err := strconv.Atoi(authorIDStr)
 	if err != nil || authorID <= 0 {
-		writeError(w, "invalid author ID", http.StatusBadRequest)
+		writeError(w, "invalid author id", http.StatusBadRequest)
 		return
 	}
 
@@ -280,7 +234,6 @@ func (h *PostHandler) GetByAuthor(w http.ResponseWriter, r *http.Request) {
 
 	posts, total, err := h.postService.GetByAuthor(r.Context(), authorID, limit, offset)
 	if err != nil {
-		// В зависимости от реализации сервиса может быть ErrUserNotFound и т.п.
 		writeError(w, "failed to get author posts", http.StatusInternalServerError)
 		return
 	}

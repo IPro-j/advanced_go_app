@@ -3,16 +3,11 @@ package service
 import (
 	"blog-api/internal/model"
 	"blog-api/internal/repository"
+	"blog-api/pkg/apperr"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
-)
-
-var (
-	ErrPostNotFound = errors.New("post not found")
-	ErrUnauthorized = errors.New("unauthorized")
-	ErrForbidden    = errors.New("forbidden")
 )
 
 type PostService struct {
@@ -57,7 +52,7 @@ func (s *PostService) GetByID(ctx context.Context, id int) (*model.Post, error) 
 		// Репозиторий уже возвращает repository.ErrPostNotFound, если не найдено.
 		// Преобразуем его в наш сервисный ErrPostNotFound для единообразия.
 		if errors.Is(err, repository.ErrPostNotFound) {
-			return nil, ErrPostNotFound
+			return nil, apperr.ErrPostNotFound
 		}
 		return nil, fmt.Errorf("failed to get post: %w", err)
 	}
@@ -102,14 +97,14 @@ func (s *PostService) Update(ctx context.Context, id int, userID int, req *model
 	post, err := s.postRepo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, repository.ErrPostNotFound) {
-			return nil, ErrPostNotFound
+			return nil, apperr.ErrPostNotFound
 		}
 		return nil, fmt.Errorf("failed to get post for update: %w", err)
 	}
 
 	// 2. Проверить, что userID является автором
 	if !post.CanBeEditedBy(userID) {
-		return nil, ErrForbidden
+		return nil, apperr.ErrForbidden
 	}
 
 	// 3. Валидировать новые данные
@@ -128,7 +123,7 @@ func (s *PostService) Update(ctx context.Context, id int, userID int, req *model
 	// 5. Сохранить через репозиторий
 	if err := s.postRepo.Update(ctx, post); err != nil {
 		if errors.Is(err, repository.ErrPostNotFound) {
-			return nil, ErrPostNotFound
+			return nil, apperr.ErrPostNotFound
 		}
 		return nil, fmt.Errorf("failed to update post: %w", err)
 	}
@@ -143,20 +138,20 @@ func (s *PostService) Delete(ctx context.Context, id int, userID int) error {
 	post, err := s.postRepo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, repository.ErrPostNotFound) {
-			return ErrPostNotFound
+			return apperr.ErrPostNotFound
 		}
 		return fmt.Errorf("failed to get post for delete: %w", err)
 	}
 
 	// 2. Проверить, что userID является автором
 	if !post.CanBeDeletedBy(userID) {
-		return ErrForbidden
+		return apperr.ErrForbidden
 	}
 
 	// 3. Удалить через репозиторий
 	if err := s.postRepo.Delete(ctx, id); err != nil {
 		if errors.Is(err, repository.ErrPostNotFound) {
-			return ErrPostNotFound
+			return apperr.ErrPostNotFound
 		}
 		return fmt.Errorf("failed to delete post: %w", err)
 	}

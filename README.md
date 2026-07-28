@@ -1,12 +1,19 @@
-# Blog API - Шаблон проектной работы
+```markdown
+# Blog API — REST API для блог‑платформы на Go
 
 ## Описание проекта
 
-Вам необходимо реализовать REST API для блога с функциональностью:
-- Аутентификация пользователей (JWT)
-- CRUD операции для постов
-- Комментарии к постам
-- Авторизация (только автор может редактировать/удалять свои посты и комментарии)
+Проект реализует REST API для блог‑платформы с аутентификацией на JWT, CRUD‑операциями для постов и комментариев, а также контролем прав доступа: только автор может редактировать или удалять свои ресурсы.
+
+**Ключевые особенности:**
+- Аутентификация и авторизация через JWT (с жёсткой фиксацией алгоритма, без доверия к полю `alg` из токена).
+- Хеширование паролей с помощью `bcrypt`.
+- Работа с PostgreSQL через `database/sql` и пул соединений.
+- Middleware: логирование запросов, Recovery для паник, CORS, проверка JWT‑токена.
+- Пагинация для списков постов и комментариев.
+- Миграции БД и запуск инфраструктуры через `docker-compose`.
+
+---
 
 ## Структура проекта
 
@@ -15,14 +22,15 @@ blog-api/
 ├── cmd/api/              # Точка входа приложения
 │   └── main.go
 ├── internal/             # Внутренние пакеты приложения
-│   ├── model/           # Модели данных
-│   ├── handler/         # HTTP хендлеры
-│   ├── service/         # Бизнес-логика
-│   ├── repository/      # Работа с БД
-│   └── middleware/      # HTTP middleware
+│   ├── model/           # Модели данных и DTO (User, Post, Comment, UserCreateRequest и т. д.)
+│   ├── handler/         # HTTP хендлеры (AuthHandler, PostHandler, CommentHandler)
+│   ├── service/         # Бизнес‑логика (UserService, PostService, CommentService)
+│   ├── repository/      # Репозитории (PostRepo, CommentRepo, UserRepo)
+│   └── middleware/      # Middleware (AuthMiddleware, Logger, Recovery)
 ├── pkg/                 # Переиспользуемые пакеты
-│   ├── auth/           # JWT и пароли
-│   └── database/       # Подключение к БД
+├── ├── apperr/          #  Хранилище ошибок приложения хендлеров и бизнес‑логики
+│   ├── auth/           # JWT и пароли (jwt.go, password.go)
+│   └── database/       # Подключение к БД и миграции (postgres.go)
 ├── migrations/         # SQL миграции
 ├── docker-compose.yml  # PostgreSQL и Adminer
 ├── .env.example        # Пример конфигурации
@@ -30,129 +38,130 @@ blog-api/
 └── README.md
 ```
 
+---
+
 ## Начало работы
 
 ### 1. Подготовка окружения
 
 ```bash
-# Клонировать шаблон
-cp -r template my-blog-api
-cd my-blog-api
-
 # Установить зависимости
 go mod download
 
 # Создать файл конфигурации
 cp .env.example .env
 
-# Запустить PostgreSQL
-docker-compose up -d
+# Запустить PostgreSQL и Adminer
+docker compose up -d
 
-# Проверить что БД работает (опционально)
-docker-compose logs postgres
+# Проверить, что БД работает
+docker compose logs postgres
+
 ```
 
-### 2. Порядок реализации
+### 2. Применение миграций
 
-#### Этап 1: Базовая инфраструктура
-1. **pkg/database/postgres.go**
-   - Реализовать подключение к БД
-   - Реализовать функцию миграций
 
-2. **pkg/auth/password.go**
-   - Реализовать хеширование паролей (bcrypt)
-   - Реализовать проверку пароля
+миграции применяются автоматически при старте:
 
-3. **pkg/auth/jwt.go**
-   - Реализовать генерацию JWT токенов
-   - Реализовать валидацию токенов
+```bash
+go run cmd/api/main.go
+```
 
-#### Этап 2: Репозитории
-1. **internal/repository/user_repo.go**
-   - Завершить реализацию всех методов
-   - SQL запросы уже подготовлены
+Проверьте наличие таблиц `users`, `posts`, `comments` (можно через Adminer или `psql`).
 
-2. **internal/repository/post_repo.go**
-   - Завершить реализацию CRUD операций
-   - Добавить методы пагинации
-
-3. **internal/repository/comment_repo.go**
-   - Завершить реализацию работы с комментариями
-
-#### Этап 3: Бизнес-логика
-1. **internal/service/user_service.go**
-   - Регистрация с валидацией
-   - Вход с проверкой пароля
-   - Генерация JWT токена
-
-2. **internal/service/post_service.go**
-   - CRUD операции с проверкой прав
-   - Пагинация и фильтрация
-
-3. **internal/service/comment_service.go**
-   - Создание комментариев
-   - Проверка прав на редактирование
-
-#### Этап 4: HTTP слой
-1. **internal/handler/auth_handler.go**
-   - Обработка регистрации и входа
-   - Возврат JWT токена
-
-2. **internal/handler/post_handler.go**
-   - REST эндпоинты для постов
-   - Обработка ошибок
-
-3. **internal/handler/comment_handler.go**
-   - Эндпоинты для комментариев
-
-#### Этап 5: Middleware
-1. **internal/middleware/auth.go**
-   - JWT проверка
-   - Добавление user_id в контекст
-
-2. **internal/middleware/logging.go**
-   - Логирование запросов
-   - Recovery от паник
-   - CORS заголовки
-
-#### Этап 6: Сборка приложения
-1. **cmd/api/main.go**
-   - Инициализация всех компонентов
-   - Настройка маршрутов
-   - Запуск сервера
+---
 
 ## API Эндпоинты
 
 ### Публичные (без аутентификации)
-- `POST /api/register` - регистрация пользователя
-- `POST /api/login` - вход пользователя
-- `GET /api/posts` - список постов
-- `GET /api/posts/{id}` - получить пост
-- `GET /api/posts/{id}/comments` - комментарии к посту
 
-### Защищенные (требуют JWT токен)
-- `POST /api/posts` - создать пост
-- `PUT /api/posts/{id}` - обновить пост (только автор)
-- `DELETE /api/posts/{id}` - удалить пост (только автор)
-- `POST /api/posts/{id}/comments` - создать комментарий к посту
+- `POST /api/register` — регистрация пользователя.
+- `POST /api/login` — вход пользователя, возврат JWT‑токена.
+- `GET /api/posts` — список постов (пагинация: `?limit=10&offset=0`).
+- `GET /api/posts/{id}` — получить пост по ID.
+- `GET /api/posts/{id}/comments` — комментарии к посту (пагинация).
+- `GET /health` — health check (без префикса `/api`).
 
-## Требования к реализации
+### Защищённые (требуется заголовок `Authorization: Bearer <token>`)
 
-### Обязательные требования
-- ✅ Все основные эндпоинты работают
-- ✅ JWT аутентификация реализована
-- ✅ Проверка прав доступа работает
-- ✅ Валидация входных данных
-- ✅ Обработка ошибок
-- ✅ Пагинация для списков
+- `POST /api/protected/posts` — создать пост.
+- `PUT /api/protected/posts/{id}` — обновить пост (только автор).
+- `DELETE /api/protected/posts/{id}` — удалить пост (только автор).
+- `POST /api/protected/posts/{id}/comments` — создать комментарий к посту.
+- `PUT /api/protected/comments/{id}` — обновить комментарий (только автор комментария).
+- `DELETE /api/protected/comments/{id}` — удалить комментарий (только автор комментария).
 
-### Дополнительные требования (для высокой оценки)
-- 📊 Кеширование часто запрашиваемых данных
-- 🔍 Поиск и фильтрация постов
-- 📝 Подробное логирование
-- ⚡ Оптимизированные SQL запросы
-- 🧪 Юнит-тесты для критической логики
-- 📚 API документация (Swagger/OpenAPI)
+> **Важно:** Все защищённые эндпоинты требуют валидного JWT‑токена в заголовке `Authorization`.
+
+---
+
+## Примеры запросов (curl для Windows)
+
+### Регистрация и вход
+
+```bush
+curl -X POST http://localhost:8080/api/register -H "Content-Type: application/json" -d "{\"username\":\"testuser\",\"email\":\"test@example.com\",\"password\":\"strongpassword\"}"
+
+curl -X POST http://localhost:8080/api/login -H "Content-Type: application/json" -d "{\"email\":\"test@example.com\",\"password\":\"strongpassword\"}"
+```
+
+Сохраните `access_token` из ответа для последующих запросов.
+
+
+### Health check
+
+```bush
+curl -v http://localhost:8080/health
+```
+
+Ожидаемый ответ:
+```json
+{"status":"ok","service":"blog-api"}
+```
+
+### Посты
+
+```bash
+# Создать пост
+curl -X POST http://localhost:8080/api/protected/posts -H "Content-Type: application/json" -H "Authorization: Bearer YOUR_JWT_TOKEN"" -d "{\"title\":\"My 1st post\",\"content\":\"Hello world!\"}"
+
+# Получить пост
+curl -X GET http://localhost:8080/api/posts/1
+
+# Список постов
+curl -X GET http://localhost:8080/api/posts/
+
+
+# Обновить пост (только автор)
+curl -X PUT "http://localhost:8080/api/protected/posts/1" -H "Content-Type: application/json" -H "Authorization: Bearer OUR_JWT_TOKEN" -d "{\"title\":\"Мой 2 пост\",\"content\":\"Теперь тут другой текст\"}"
+
+# Удалить пост (только автор)
+curl -X DELETE "http://localhost:8080/api/protected/posts/2" -H "Authorization: Bearer OUR_JWT_TOKEN""
+```
+
+### Комментарии
+
+```bash
+# Создать комментарий к посту
+curl -X POST http://localhost:8080/api/protected/posts/1/comments -H "Content-Type: application/json" -H "Authorization: Bearer YOUR_JWT_TOKEN" -d "{\"content\":\"Ерунда какая-та\"}"
+
+
+# Получить комментарии к посту (с пагинацией)
+curl -X GET "http://localhost:8080/api/posts/1/comments?limit=5&offset=0"
+
+# Обновить комментарий (только автор)
+curl -X PUT http://localhost:8080/api/protected/comments/1 -H "Content-Type: application/json" -H "Authorization: Bearer YOUR_JWT_TOKEN" -d "{\"content\":\"Обновлённый текст комментария\"}"
+
+
+# Удалить комментарий (только автор)
+curl -v -X DELETE http://localhost:8080/api/protected/comments/1 -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+Для отладки удобно использовать `-v`
+
+
+---
 
 ## Полезные команды
 
@@ -160,77 +169,15 @@ docker-compose logs postgres
 # Запуск приложения
 go run cmd/api/main.go
 
-# Запуск с hot-reload (установить air)
-air
-
-# Тестирование
-go test ./...
-
-# Проверка на ошибки
-go vet ./...
-golangci-lint run
-
-# Форматирование кода
-go fmt ./...
 
 # База данных
-docker-compose up -d    # Запустить
-docker-compose down      # Остановить
-docker-compose logs -f   # Логи
-
-# Примеры запросов
-# Регистрация
-curl -X POST http://localhost:8080/api/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"testuser","email":"test@example.com","password":"password123"}'
-
-# Вход
-curl -X POST http://localhost:8080/api/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"password123"}'
-
-# Создание поста (с токеном)
-curl -X POST http://localhost:8080/api/posts \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"title":"My Post","content":"Post content"}'
+docker compose up -d          # Запустить
+docker compose down           # Остановить
+docker compose logs -f        # Логи
+docker exec -it blog-api_postgres_1 psql -U postgres -d blog_db
 ```
 
-## Где искать подсказки
 
-1. **TODO комментарии** - в каждом файле есть указания что нужно реализовать
-2. **Интерфейсы** - в `repository/interfaces.go` описаны все методы
-3. **Модели** - в `model/` определены все структуры данных
-4. **SQL запросы** - базовые запросы уже есть в репозиториях
-5. **Примеры из solution** - можете подсмотреть в готовое решение при затруднениях
-
-## Частые ошибки
-
-1. **Не забудьте обработку ошибок** - всегда проверяйте err != nil
-2. **SQL injection** - используйте placeholder'ы ($1, $2) в SQL запросах
-3. **Контекст** - передавайте context во все методы работы с БД
-4. **Закрытие ресурсов** - используйте defer для rows.Close()
-5. **Права доступа** - проверяйте что пользователь может редактировать только свои данные
-
-## Критерии оценки
-
-### Минимум для зачета (60%)
-- Работают эндпоинты регистрации и входа
-- Можно создавать и получать посты
-- JWT токены генерируются и проверяются
-
-### Хорошо (80%)
-- Все CRUD операции работают
-- Реализована проверка прав доступа
-- Корректная обработка ошибок
-- Пагинация работает
-
-### Отлично (100%)
-- Код хорошо структурирован
-- Добавлены дополнительные функции
-- Есть тесты
-- Оптимизированы запросы к БД
-- Документирован API
 
 ## Полезные ссылки
 
@@ -239,12 +186,6 @@ curl -X POST http://localhost:8080/api/posts \
 - [Chi router](https://github.com/go-chi/chi)
 - [bcrypt in Go](https://pkg.go.dev/golang.org/x/crypto/bcrypt)
 - [PostgreSQL documentation](https://www.postgresql.org/docs/)
+- [Writing tests in Go](https://go.dev/doc/tutorial/testing)
 
-## Вопросы?
-
-Если возникли вопросы:
-1. Проверьте TODO комментарии в коде
-2. Посмотрите примеры в готовом решении
-3. Обратитесь к преподавателю
-
-Удачи в реализации! 🚀
+---

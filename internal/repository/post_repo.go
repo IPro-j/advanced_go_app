@@ -118,7 +118,7 @@ func (r *PostRepo) GetAll(ctx context.Context, limit, offset int) ([]*model.Post
 }
 
 // List возвращает список постов с пагинацией (для GetAll).
-func (r *PostRepo) List(ctx context.Context, limit, offset int) ([]*model.Post, error) {
+/*func (r *PostRepo) List(ctx context.Context, limit, offset int) ([]*model.Post, error) {
 	const query = `
 		SELECT id, title, content, author_id, created_at, updated_at
 		FROM posts
@@ -161,7 +161,7 @@ func (r *PostRepo) Count(ctx context.Context) (int, error) {
 
 	return total, nil
 }
-
+*/
 // Update обновляет существующие поля поста. Предполагается, что модель уже содержит актуальный ID и новые значения.
 func (r *PostRepo) Update(ctx context.Context, post *model.Post) error {
 	const query = `

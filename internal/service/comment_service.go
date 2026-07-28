@@ -3,16 +3,11 @@ package service
 import (
 	"blog-api/internal/model"
 	"blog-api/internal/repository"
+	"blog-api/pkg/apperr"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
-)
-
-var (
-	ErrCommentNotFound = errors.New("comment not found")
-	ErrPostNotExists   = errors.New("post does not exist")
-	//ErrForbidden       = errors.New("forbidden")
 )
 
 type CommentService struct {
@@ -43,7 +38,7 @@ func (s *CommentService) Create(ctx context.Context, postID, userID int, req *mo
 	_, err := s.postRepo.GetByID(ctx, postID)
 	if err != nil {
 		if errors.Is(err, repository.ErrPostNotFound) {
-			return nil, ErrPostNotExists // 404
+			return nil, apperr.ErrPostNotExists // 404
 		}
 		return nil, fmt.Errorf("failed to check post existence: %w", err)
 	}
@@ -65,8 +60,8 @@ func (s *CommentService) Create(ctx context.Context, postID, userID int, req *mo
 func (s *CommentService) GetByID(ctx context.Context, id int) (*model.Comment, error) {
 	comment, err := s.commentRepo.GetByID(ctx, id)
 	if err != nil {
-		if errors.Is(err, repository.ErrCommentNotFound) {
-			return nil, ErrCommentNotFound
+		if errors.Is(err, apperr.ErrCommentNotFound) {
+			return nil, apperr.ErrCommentNotFound
 		}
 		return nil, fmt.Errorf("failed to get comment by ID: %w", err)
 	}
@@ -93,7 +88,7 @@ func (s *CommentService) GetByPost(ctx context.Context, postID int, limit, offse
 	_, err := s.postRepo.GetByID(ctx, postID)
 	if err != nil {
 		if errors.Is(err, repository.ErrPostNotFound) {
-			return nil, 0, ErrPostNotExists
+			return nil, 0, apperr.ErrPostNotExists
 		}
 		return nil, 0, fmt.Errorf("failed to check post existence for comments: %w", err)
 	}
@@ -116,13 +111,14 @@ func (s *CommentService) Update(ctx context.Context, id int, userID int, req *mo
 	comment, err := s.commentRepo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, repository.ErrCommentNotFound) {
-			return nil, ErrCommentNotFound
+			return nil, apperr.ErrCommentNotFound
 		}
 		return nil, fmt.Errorf("failed to get comment for update: %w", err)
 	}
 
-	if comment.AuthorID != userID {
-		return nil, ErrForbidden
+	// Используем метод модели для проверки прав
+	if !comment.CanBeEditedBy(userID) {
+		return nil, apperr.ErrForbidden
 	}
 
 	if err := validateCommentUpdateRequest(req); err != nil {
@@ -134,7 +130,7 @@ func (s *CommentService) Update(ctx context.Context, id int, userID int, req *mo
 
 	if err := s.commentRepo.Update(ctx, comment); err != nil {
 		if errors.Is(err, repository.ErrCommentNotFound) {
-			return nil, ErrCommentNotFound
+			return nil, apperr.ErrCommentNotFound
 		}
 		return nil, fmt.Errorf("failed to update comment: %w", err)
 	}
@@ -147,18 +143,18 @@ func (s *CommentService) Delete(ctx context.Context, id int, userID int) error {
 	comment, err := s.commentRepo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, repository.ErrCommentNotFound) {
-			return ErrCommentNotFound
+			return apperr.ErrCommentNotFound
 		}
 		return fmt.Errorf("failed to get comment for delete: %w", err)
 	}
 
-	if comment.AuthorID != userID {
-		return ErrForbidden
+	if !comment.CanBeDeletedBy(userID) {
+		return apperr.ErrForbidden
 	}
 
 	if err := s.commentRepo.Delete(ctx, id); err != nil {
 		if errors.Is(err, repository.ErrCommentNotFound) {
-			return ErrCommentNotFound
+			return apperr.ErrCommentNotFound
 		}
 		return fmt.Errorf("failed to delete comment: %w", err)
 	}
