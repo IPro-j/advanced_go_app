@@ -8,7 +8,7 @@
 **Ключевые особенности:**
 - Аутентификация и авторизация через JWT (с жёсткой фиксацией алгоритма, без доверия к полю `alg` из токена).
 - Хеширование паролей с помощью `bcrypt`.
-- Работа с PostgreSQL через `database/sql` и пул соединений.
+- Работа с PostgreSQL через `database/` и пул соединений.
 - Middleware: логирование запросов, Recovery для паник, CORS, проверка JWT‑токена.
 - Пагинация для списков постов и комментариев.
 - Миграции БД и запуск инфраструктуры через `docker-compose`.
@@ -17,28 +17,26 @@
 
 ## Структура проекта
 
-```
 blog-api/
-├── cmd/api/              # Точка входа приложения
+├── cmd/api/                          # Точка входа приложения
 │   └── main.go
-├── internal/             # Внутренние пакеты приложения
-│   ├── model/           # Модели данных и DTO (User, Post, Comment, UserCreateRequest и т. д.)
-│   ├── handler/         # HTTP хендлеры (AuthHandler, PostHandler, CommentHandler)
-│   ├── service/         # Бизнес‑логика (UserService, PostService, CommentService)
-│   ├── repository/      # Репозитории (PostRepo, CommentRepo, UserRepo)
-│   └── middleware/      # Middleware (AuthMiddleware, Logger, Recovery)
-├── pkg/                 # Переиспользуемые пакеты
-├── ├── apperr/          #  Хранилище ошибок приложения хендлеров и бизнес‑логики
-│   ├── auth/           # JWT и пароли (jwt.go, password.go)
-│   └── database/       # Подключение к БД и миграции (postgres.go)
-├── migrations/         # SQL миграции
-├── docker-compose.yml  # PostgreSQL и Adminer
-├── .env.example        # Пример конфигурации
-├── go.mod
-└── README.md
-```
+├── internal/                         # Внутренние пакеты приложения
+│   ├── model/                        # Модели данных и DTO (User, Post, Comment)
+│   ├── handler/                      # HTTP хендлеры (AuthHandler, PostHandler)
+│   ├── service/                      # Бизнес‑логика (UserService, PostService)
+│   ├── repository/                   # Репозитории (PostRepo, CommentRepo, UserRepo)
+│   └── middleware/                   # Middleware (AuthMiddleware, Logger, Recovery)
+├── pkg/                              # Переиспользуемые пакеты
+│   ├── apperr/                       # Хранилище ошибок приложения
+│   ├── auth/                         # JWT и пароли (jwt.go, password.go)
+│   └── database/                     # Подключение к БД и миграции (postgres.go)
+├── migrations/                       # SQL миграции
+├── docker-compose.yml                # PostgreSQL и Adminer
+├── .env.example                      # Пример конфигурации
+├── go.mod                            # Зависимости проекта
+└── README.md                         # Документация
 
----
+```
 
 ## Начало работы
 
