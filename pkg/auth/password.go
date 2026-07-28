@@ -16,7 +16,7 @@ var (
 )
 
 const (
-	defaultCost = 10 // Оптимальный баланс скорости и безопасности для большинства проектов
+	defaultCost = 10
 	minLength   = 6
 )
 
@@ -90,7 +90,7 @@ func ValidatePasswordStrength(password string) error {
 	return nil
 }
 
-// GenerateRandomPassword генерирует случайный пароль (опциональное задание)
+// GenerateRandomPassword генерирует случайный пароль
 func GenerateRandomPassword(length int) (string, error) {
 	if length <= 0 {
 		return "", errors.New("length must be positive")

@@ -56,8 +56,6 @@ type PostRepository interface {
 
 	// Exists проверяет существование поста по ID
 	Exists(ctx context.Context, id int) (bool, error)
-
-	// TODO: Добавить методы для получения постов конкретного автора
 }
 
 // CommentRepository определяет интерфейс для работы с комментариями
@@ -81,9 +79,3 @@ type CommentRepository interface {
 	ListByAuthor(ctx context.Context, authorID int, limit, offset int) ([]*model.Comment, error)
 	CountByAuthor(ctx context.Context, authorID int) (int, error)
 }
-
-// TODO: При реализации репозиториев учитывайте следующее:
-// 1. Используйте параметризованные запросы для защиты от SQL инъекций
-// 2. Обрабатывайте ошибку sql.ErrNoRows и возвращайте понятные ошибки типа ErrUserNotFound
-// 3. Устанавливайте created_at и updated_at при создании/обновлении записей
-// 4. Используйте транзакции где это необходимо

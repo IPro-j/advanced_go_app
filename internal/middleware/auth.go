@@ -8,8 +8,6 @@ import (
 	"strings"
 )
 
-// contextKey — кастомный тип для ключей контекста, чтобы избежать коллизий
-
 const (
 	PostIDKey contextKey = "postID"
 	// UserIDKey — ключ для хранения ID пользователя в контексте
@@ -62,7 +60,6 @@ func (m *AuthMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// OptionalAuth — middleware, который извлекает JWT-токен, если он есть, но не требует его.
 // Если токен валиден — добавляет данные пользователя в контекст.
 // Если токена нет или он невалиден — продолжает обработку как анонимный запрос.
 func (m *AuthMiddleware) OptionalAuth(next http.HandlerFunc) http.HandlerFunc {
@@ -126,7 +123,6 @@ func writeJSONError(w http.ResponseWriter, message string, statusCode int) {
 }
 
 // Chain позволяет объединить несколько middleware в цепочку.
-// Middleware применяются в порядке слева направо.
 func Chain(handler http.HandlerFunc, middlewares ...func(http.HandlerFunc) http.HandlerFunc) http.HandlerFunc {
 	wrapped := handler
 	for i := len(middlewares) - 1; i >= 0; i-- {
@@ -136,7 +132,6 @@ func Chain(handler http.HandlerFunc, middlewares ...func(http.HandlerFunc) http.
 }
 
 // AuthMiddlewareForChi возвращает middleware, совместимый с chi.Router.Use.
-// Он использует RequireAuth для проверки токена.
 func (m *AuthMiddleware) AuthMiddlewareForChi() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

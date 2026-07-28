@@ -84,7 +84,7 @@ func (s *CommentService) GetByPost(ctx context.Context, postID int, limit, offse
 		offset = 0
 	}
 
-	// Опционально: проверка существования поста
+	// проверка существования поста
 	_, err := s.postRepo.GetByID(ctx, postID)
 	if err != nil {
 		if errors.Is(err, repository.ErrPostNotFound) {
@@ -163,8 +163,7 @@ func (s *CommentService) Delete(ctx context.Context, id int, userID int) error {
 }
 
 // GetByAuthor получает комментарии конкретного автора с пагинацией
-// Для этой функции в репозитории должны быть ListByAuthor и CountByAuthor.
-// Если их ещё нет — напиши, я дам реализацию.
+
 func (s *CommentService) GetByAuthor(ctx context.Context, authorID int, limit, offset int) ([]*model.Comment, int, error) {
 	const (
 		defaultLimit = 20

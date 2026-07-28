@@ -68,7 +68,6 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 		}
 
-		// Для остальных ошибок лучше логировать детали (но не отдавать клиенту)
 		log.Printf("registration failed: %v", err)
 		writeError(w, "registration failed", http.StatusInternalServerError)
 		return

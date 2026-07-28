@@ -60,7 +60,6 @@ func (m *LoggingMiddleware) Logger(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// Добавь этот метод в internal/middleware/middleware.go
 func (m *LoggingMiddleware) Chain() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		// Порядок важен: CORS → RequestID → Logger → Recovery
@@ -128,7 +127,6 @@ func (m *LoggingMiddleware) RequestID(next http.HandlerFunc) http.HandlerFunc {
 }
 
 // RateLimiter — простая реализация rate limiting по IP (в памяти, без persistence)
-// Для продакшена лучше использовать Redis или отдельное хранилище
 func (m *LoggingMiddleware) RateLimiter(maxRequests int, window time.Duration) func(http.HandlerFunc) http.HandlerFunc {
 	type limiterState struct {
 		count     int

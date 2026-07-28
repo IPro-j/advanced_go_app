@@ -26,7 +26,6 @@ func NewUserService(userRepo repository.UserRepository, jwtManager *auth.JWTMana
 }
 
 // Register регистрирует нового пользователя и возвращает TokenResponse
-// В поле Token кладётся access_token (по требованию модели), refresh_token не отдаётся в JSON.
 func (s *UserService) Register(ctx context.Context, req *model.UserCreateRequest) (*model.TokenResponse, error) {
 	// 1. Валидация входных данных
 	if err := validateUserCreateRequest(req); err != nil {
@@ -58,8 +57,6 @@ func (s *UserService) Register(ctx context.Context, req *model.UserCreateRequest
 	}
 
 	// 5. Создание модели пользователя
-	// Важно: в model.User поле называется Password, но в БД колонка password_hash.
-	// Если в репозитории делается Scan/Exec по именам полей — убедись, что маппинг правильный.
 	user := &model.User{
 		Username: req.Username,
 		Email:    req.Email,

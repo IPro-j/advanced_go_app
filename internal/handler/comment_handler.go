@@ -63,8 +63,6 @@ func (h *CommentHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetByID возвращает комментарий по ID
-// GET /api/comments/{id}
-// GetByID — GET /api/comments/{id}
 func (h *CommentHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	if idStr == "" {
@@ -93,8 +91,6 @@ func (h *CommentHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetByPost возвращает комментарии к посту с пагинацией
-// GET /api/posts/{id}/comments?limit=20&offset=0
-// GetByPost — GET /api/posts/{postID}/comments?limit=20&offset=0
 func (h *CommentHandler) GetByPost(w http.ResponseWriter, r *http.Request) {
 	postIDStr := chi.URLParam(r, "id")
 	if postIDStr == "" {

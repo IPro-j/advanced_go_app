@@ -21,7 +21,7 @@ func NewPostRepo(db *sql.DB) *PostRepo {
 	return &PostRepo{db: db}
 }
 
-// Create сохраняет новый пост. ID заполняется БД автоматически (SERIAL/IDENTITY).
+// Create сохраняет новый пост.
 func (r *PostRepo) Create(ctx context.Context, post *model.Post) error {
 	const query = `
 		INSERT INTO posts (title, content, author_id, created_at, updated_at)
@@ -117,52 +117,7 @@ func (r *PostRepo) GetAll(ctx context.Context, limit, offset int) ([]*model.Post
 	return posts, nil
 }
 
-// List возвращает список постов с пагинацией (для GetAll).
-/*func (r *PostRepo) List(ctx context.Context, limit, offset int) ([]*model.Post, error) {
-	const query = `
-		SELECT id, title, content, author_id, created_at, updated_at
-		FROM posts
-		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2
-	`
-
-	rows, err := r.db.QueryContext(ctx, query, limit, offset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list posts: %w", err)
-	}
-	defer rows.Close()
-
-	var posts []*model.Post
-	for rows.Next() {
-		var p model.Post
-		err := rows.Scan(&p.ID, &p.Title, &p.Content, &p.AuthorID, &p.CreatedAt, &p.UpdatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan post row: %w", err)
-		}
-		posts = append(posts, &p)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating posts rows: %w", err)
-	}
-
-	return posts, nil
-}
-
-// Count возвращает общее количество постов (для пагинации в GetAll).
-func (r *PostRepo) Count(ctx context.Context) (int, error) {
-	const query = `SELECT COUNT(*) FROM posts`
-
-	var total int
-	err := r.db.QueryRowContext(ctx, query).Scan(&total)
-	if err != nil {
-		return 0, fmt.Errorf("failed to count posts: %w", err)
-	}
-
-	return total, nil
-}
-*/
-// Update обновляет существующие поля поста. Предполагается, что модель уже содержит актуальный ID и новые значения.
+// Update обновляет существующие поля поста.
 func (r *PostRepo) Update(ctx context.Context, post *model.Post) error {
 	const query = `
 		UPDATE posts
