@@ -57,7 +57,7 @@ func Migrate(db *sql.DB) error {
 			id SERIAL PRIMARY KEY,
 			username VARCHAR(255) NOT NULL UNIQUE,
 			email VARCHAR(255) NOT NULL UNIQUE,
-			password_hash VARCHAR(255) NOT NULL,
+			password VARCHAR(255) NOT NULL,
 			created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
 			updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 		)`,
@@ -93,16 +93,10 @@ func Migrate(db *sql.DB) error {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	defer func() {
-		// Если функция завершится с ошибкой — откатываем транзакцию
-		if err != nil {
-			tx.Rollback()
-		}
-	}()
-
 	for i, query := range queries {
 		_, err := tx.Exec(query)
 		if err != nil {
+			_ = tx.Rollback()
 			return fmt.Errorf("migration failed at step %d: %w", i, err)
 		}
 	}

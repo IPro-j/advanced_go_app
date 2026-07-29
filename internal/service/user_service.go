@@ -139,24 +139,16 @@ func validateUserCreateRequest(req *model.UserCreateRequest) error {
 		return errors.New("request cannot be nil")
 	}
 
-	username := strings.TrimSpace(req.Username)
-	email := strings.TrimSpace(req.Email)
-	password := req.Password
-
-	if len(username) < 3 {
-		return errors.New("username must be at least 3 characters")
-	}
-
-	if len(email) == 0 {
-		return errors.New("email is required")
+	if len(req.Username) < 3 {
+		return apperr.ErrInvalidUsername
 	}
 
 	if !isValidEmail(req.Email) {
-		return errors.New("invalid email format")
+		return apperr.ErrInvalidEmail
 	}
 
-	if len(password) < 6 {
-		return errors.New("password must be at least 6 characters")
+	if len(req.Password) < 6 {
+		return apperr.ErrWeakPassword
 	}
 
 	return nil

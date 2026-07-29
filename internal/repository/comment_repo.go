@@ -2,15 +2,12 @@ package repository
 
 import (
 	"blog-api/internal/model"
+	"blog-api/pkg/apperr"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"time"
-)
-
-var (
-	ErrCommentNotFound = errors.New("comment not found")
 )
 
 // CommentRepo представляет репозиторий для работы с комментариями
@@ -54,7 +51,7 @@ func (r *CommentRepo) GetByID(ctx context.Context, id int) (*model.Comment, erro
 		&c.ID, &c.Content, &c.PostID, &c.AuthorID, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrCommentNotFound
+		return nil, apperr.ErrCommentNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get comment by id: %w", err)
@@ -127,7 +124,7 @@ func (r *CommentRepo) Update(ctx context.Context, comment *model.Comment) error 
 		return fmt.Errorf("failed to check rows affected: %w", err)
 	}
 	if n == 0 {
-		return ErrCommentNotFound
+		return apperr.ErrCommentNotFound
 	}
 	return nil
 }
@@ -145,7 +142,7 @@ func (r *CommentRepo) Delete(ctx context.Context, id int) error {
 		return fmt.Errorf("failed to check rows affected: %w", err)
 	}
 	if n == 0 {
-		return ErrCommentNotFound
+		return apperr.ErrCommentNotFound
 	}
 	return nil
 }

@@ -2,15 +2,12 @@ package repository
 
 import (
 	"blog-api/internal/model"
+	"blog-api/pkg/apperr"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"time"
-)
-
-var (
-	ErrPostNotFound = errors.New("post not found")
 )
 
 type PostRepo struct {
@@ -62,7 +59,7 @@ func (r *PostRepo) GetByID(ctx context.Context, id int) (*model.Post, error) {
 	err := row.Scan(&p.ID, &p.Title, &p.Content, &p.AuthorID, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrPostNotFound
+			return nil, apperr.ErrPostNotFound
 		}
 		return nil, fmt.Errorf("failed to get post by ID: %w", err)
 	}
@@ -137,7 +134,7 @@ func (r *PostRepo) Update(ctx context.Context, post *model.Post) error {
 
 	if n == 0 {
 		// Пост с таким ID не найден — можно вернуть NotFound, но обычно это проверяется до вызова Update
-		return ErrPostNotFound
+		return apperr.ErrPostNotFound
 	}
 
 	// Обновляем updated_at в памяти, чтобы не делать лишний SELECT
@@ -161,7 +158,7 @@ func (r *PostRepo) Delete(ctx context.Context, id int) error {
 	}
 
 	if n == 0 {
-		return ErrPostNotFound
+		return apperr.ErrPostNotFound
 	}
 
 	return nil

@@ -6,6 +6,7 @@ import (
 	"blog-api/internal/service"
 	"blog-api/pkg/apperr"
 	"blog-api/pkg/auth"
+	"strings"
 
 	//"context"
 	"encoding/json"
@@ -14,7 +15,7 @@ import (
 	"net/http"
 )
 
-// AuthTokenResponse — ответ с токенами (access + refresh)
+// AuthTokenResponse — ответ с токеном
 type AuthTokenResponse struct {
 	AccessToken string `json:"access_token"`
 	ExpiresAt   int64  `json:"expires_at"` // Unix timestamp
@@ -47,13 +48,34 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Простая валидация (можно вынести в отдельный валидатор)
+	// нормализация данных
+	req.Username = strings.TrimSpace(req.Username)
+	req.Email = strings.TrimSpace(req.Email)
+	req.Password = strings.TrimSpace(req.Password)
+
+	//Простая валидация
 	if req.Username == "" || req.Email == "" || req.Password == "" {
 		writeError(w, "username, email and password are required", http.StatusBadRequest)
 		return
 	}
 
+	req.Email = strings.ToLower(req.Email)
+
 	user, err := h.userService.Register(r.Context(), &req)
+
+	if errors.Is(err, apperr.ErrInvalidUsername) {
+		writeError(w, "username is invalid", http.StatusBadRequest)
+		return
+	}
+	if errors.Is(err, apperr.ErrInvalidEmail) {
+		writeError(w, "email is invalid", http.StatusBadRequest)
+		return
+	}
+	if errors.Is(err, apperr.ErrWeakPassword) {
+		writeError(w, "password is too weak", http.StatusBadRequest)
+		return
+	}
+
 	if err != nil {
 		// Проверяем конкретную ошибку дубликата
 		if errors.Is(err, apperr.ErrUserAlreadyExists) {
@@ -102,6 +124,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
+
+	req.Email = strings.TrimSpace(req.Email)
+	req.Password = strings.TrimSpace(req.Password)
 
 	if req.Email == "" || req.Password == "" {
 		writeError(w, "email and password are required", http.StatusBadRequest)

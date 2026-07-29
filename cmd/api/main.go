@@ -76,39 +76,33 @@ func main() {
 	router.Use(loggingMW.Chain())
 
 	// Health check
-	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok","service":"blog-api"}`))
-	})
 
 	// Единый блок /api
 	router.Route("/api", func(r chi.Router) {
 
-		// Публичные маршруты
+		//проверка состояния сервиса (GET /api/health)
+		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"ok","service":"blog-api"}`))
+		})
+
 		r.Post("/register", authHandler.Register)
 		r.Post("/login", authHandler.Login)
 		r.Get("/posts", postHandler.GetAll)
-		// Эндпоинт: GET /api/posts/{id} — получить один пост
 		r.Get("/posts/{id}", postHandler.GetByID)
-
-		// Эндпоинт: GET /api/posts/{id}/comments — комментарии к посту (с пагинацией)
 		r.Get("/posts/{id}/comments", commentHandler.GetByPost)
 
-		// Защищённая зона: применяем middleware
-		// --- Защищённая группа ---
-		// Сначала middleware, потом маршруты
-		r.Route("/protected", func(pr chi.Router) {
-			pr.Use(authMW.AuthMiddlewareForChi()) // авторизация только тут
-
-			pr.Post("/posts", postHandler.Create)
-			pr.Put("/posts/{id}", postHandler.Update)
-			pr.Delete("/posts/{id}", postHandler.Delete)
-
-			pr.Post("/posts/{id}/comments", commentHandler.Create)
-			pr.Put("/comments/{id}", commentHandler.Update)
-			pr.Delete("/comments/{id}", commentHandler.Delete)
+		r.Group(func(r chi.Router) {
+			r.Use(authMW.AuthMiddlewareForChi()) // авторизация только тут
+			r.Post("/posts", postHandler.Create)
+			r.Put("/posts/{id}", postHandler.Update)
+			r.Delete("/posts/{id}", postHandler.Delete)
+			r.Post("/posts/{id}/comments", commentHandler.Create)
+			r.Put("/comments/{id}", commentHandler.Update)
+			r.Delete("/comments/{id}", commentHandler.Delete)
 		})
+
 	})
 
 	addr := cfg.ServerHost + ":" + strconv.Itoa(cfg.ServerPort)

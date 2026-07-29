@@ -51,7 +51,7 @@ func (s *PostService) GetByID(ctx context.Context, id int) (*model.Post, error) 
 	if err != nil {
 		// Репозиторий уже возвращает repository.ErrPostNotFound, если не найдено.
 		// Преобразуем его в наш сервисный ErrPostNotFound для единообразия.
-		if errors.Is(err, repository.ErrPostNotFound) {
+		if errors.Is(err, apperr.ErrPostNotFound) {
 			return nil, apperr.ErrPostNotFound
 		}
 		return nil, fmt.Errorf("failed to get post: %w", err)
@@ -96,7 +96,7 @@ func (s *PostService) Update(ctx context.Context, id int, userID int, req *model
 	// 1. Получить существующий пост
 	post, err := s.postRepo.GetByID(ctx, id)
 	if err != nil {
-		if errors.Is(err, repository.ErrPostNotFound) {
+		if errors.Is(err, apperr.ErrPostNotFound) {
 			return nil, apperr.ErrPostNotFound
 		}
 		return nil, fmt.Errorf("failed to get post for update: %w", err)
@@ -122,7 +122,7 @@ func (s *PostService) Update(ctx context.Context, id int, userID int, req *model
 
 	// 5. Сохранить через репозиторий
 	if err := s.postRepo.Update(ctx, post); err != nil {
-		if errors.Is(err, repository.ErrPostNotFound) {
+		if errors.Is(err, apperr.ErrPostNotFound) {
 			return nil, apperr.ErrPostNotFound
 		}
 		return nil, fmt.Errorf("failed to update post: %w", err)
@@ -137,7 +137,7 @@ func (s *PostService) Delete(ctx context.Context, id int, userID int) error {
 	// 1. Найти пост и проверить существование
 	post, err := s.postRepo.GetByID(ctx, id)
 	if err != nil {
-		if errors.Is(err, repository.ErrPostNotFound) {
+		if errors.Is(err, apperr.ErrPostNotFound) {
 			return apperr.ErrPostNotFound
 		}
 		return fmt.Errorf("failed to get post for delete: %w", err)
@@ -150,7 +150,7 @@ func (s *PostService) Delete(ctx context.Context, id int, userID int) error {
 
 	// 3. Удалить через репозиторий
 	if err := s.postRepo.Delete(ctx, id); err != nil {
-		if errors.Is(err, repository.ErrPostNotFound) {
+		if errors.Is(err, apperr.ErrPostNotFound) {
 			return apperr.ErrPostNotFound
 		}
 		return fmt.Errorf("failed to delete post: %w", err)

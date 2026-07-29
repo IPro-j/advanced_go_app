@@ -37,7 +37,7 @@ func (s *CommentService) Create(ctx context.Context, postID, userID int, req *mo
 	// 1. Проверяем, что пост существует
 	_, err := s.postRepo.GetByID(ctx, postID)
 	if err != nil {
-		if errors.Is(err, repository.ErrPostNotFound) {
+		if errors.Is(err, apperr.ErrPostNotFound) {
 			return nil, apperr.ErrPostNotExists // 404
 		}
 		return nil, fmt.Errorf("failed to check post existence: %w", err)
@@ -87,7 +87,7 @@ func (s *CommentService) GetByPost(ctx context.Context, postID int, limit, offse
 	// проверка существования поста
 	_, err := s.postRepo.GetByID(ctx, postID)
 	if err != nil {
-		if errors.Is(err, repository.ErrPostNotFound) {
+		if errors.Is(err, apperr.ErrPostNotFound) {
 			return nil, 0, apperr.ErrPostNotExists
 		}
 		return nil, 0, fmt.Errorf("failed to check post existence for comments: %w", err)
@@ -110,7 +110,7 @@ func (s *CommentService) GetByPost(ctx context.Context, postID int, limit, offse
 func (s *CommentService) Update(ctx context.Context, id int, userID int, req *model.CommentUpdateRequest) (*model.Comment, error) {
 	comment, err := s.commentRepo.GetByID(ctx, id)
 	if err != nil {
-		if errors.Is(err, repository.ErrCommentNotFound) {
+		if errors.Is(err, apperr.ErrCommentNotFound) {
 			return nil, apperr.ErrCommentNotFound
 		}
 		return nil, fmt.Errorf("failed to get comment for update: %w", err)
@@ -129,7 +129,7 @@ func (s *CommentService) Update(ctx context.Context, id int, userID int, req *mo
 	// updated_at обновится внутри репозитория
 
 	if err := s.commentRepo.Update(ctx, comment); err != nil {
-		if errors.Is(err, repository.ErrCommentNotFound) {
+		if errors.Is(err, apperr.ErrCommentNotFound) {
 			return nil, apperr.ErrCommentNotFound
 		}
 		return nil, fmt.Errorf("failed to update comment: %w", err)
@@ -142,7 +142,7 @@ func (s *CommentService) Update(ctx context.Context, id int, userID int, req *mo
 func (s *CommentService) Delete(ctx context.Context, id int, userID int) error {
 	comment, err := s.commentRepo.GetByID(ctx, id)
 	if err != nil {
-		if errors.Is(err, repository.ErrCommentNotFound) {
+		if errors.Is(err, apperr.ErrCommentNotFound) {
 			return apperr.ErrCommentNotFound
 		}
 		return fmt.Errorf("failed to get comment for delete: %w", err)
@@ -153,7 +153,7 @@ func (s *CommentService) Delete(ctx context.Context, id int, userID int) error {
 	}
 
 	if err := s.commentRepo.Delete(ctx, id); err != nil {
-		if errors.Is(err, repository.ErrCommentNotFound) {
+		if errors.Is(err, apperr.ErrCommentNotFound) {
 			return apperr.ErrCommentNotFound
 		}
 		return fmt.Errorf("failed to delete comment: %w", err)

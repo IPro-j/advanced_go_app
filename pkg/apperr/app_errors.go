@@ -17,4 +17,8 @@ var (
 	ErrUserAlreadyExists  = errors.New("user already exists")
 	ErrEmailAlreadyExists = errors.New("email already exists")
 	ErrInvalidCredentials = errors.New("invalid credentials")
+
+	ErrInvalidUsername = errors.New("invalid username")
+	ErrInvalidEmail    = errors.New("invalid email")
+	ErrWeakPassword    = errors.New("password too weak")
 )

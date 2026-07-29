@@ -2,6 +2,7 @@ package repository
 
 import (
 	"blog-api/internal/model"
+	"blog-api/pkg/apperr"
 	"context"
 	"database/sql"
 	"errors"
@@ -9,11 +10,6 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-)
-
-var (
-	ErrUserNotFound      = errors.New("user not found")
-	ErrUserAlreadyExists = errors.New("user already exists")
 )
 
 // UserRepo представляет репозиторий для работы с пользователями
@@ -41,7 +37,7 @@ func (r *UserRepo) Create(ctx context.Context, user *model.User) error {
 	if err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
-			return ErrUserAlreadyExists
+			return apperr.ErrUserAlreadyExists
 		}
 		return fmt.Errorf("failed to create user: %w", err)
 	}
@@ -60,7 +56,7 @@ func (r *UserRepo) GetByID(ctx context.Context, id int) (*model.User, error) {
 		&u.ID, &u.Username, &u.Email, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, ErrUserNotFound
+		return nil, apperr.ErrUserNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user by id: %w", err)
@@ -76,7 +72,7 @@ func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*model.User, e
 		&u.ID, &u.Username, &u.Email, &u.Password, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, ErrUserNotFound
+		return nil, apperr.ErrUserNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user by email: %w", err)
@@ -92,7 +88,7 @@ func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*model.U
 		&u.ID, &u.Username, &u.Email, &u.Password, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, ErrUserNotFound
+		return nil, apperr.ErrUserNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user by username: %w", err)
@@ -120,63 +116,3 @@ func (r *UserRepo) ExistsByUsername(ctx context.Context, username string) (bool,
 	}
 	return exists, nil
 }
-
-// Update обновляет данные пользователя.
-// В этой реализации обновляются username, email и password.
-// ВАЖНО: в реальном проекте пароль не стоит передавать как есть — его нужно хешировать ДО вызова Update
-// (обычно это делается в сервисе). Здесь мы просто сохраняем переданное значение.
-/*func (r *UserRepo) Update(ctx context.Context, user *model.User) error {
-	user.UpdatedAt = time.Now()
-
-	query := `
-		UPDATE users
-		SET username = $1, email = $2, password = $3, updated_at = $4
-		WHERE id = $5
-		RETURNING username, email
-	`
-
-	// Выполняем запрос и проверяем, была ли затронута строка
-	res, err := r.db.ExecContext(ctx, query, user.Username, user.Email, user.Password, user.UpdatedAt, user.ID)
-	if err != nil {
-		var pqErr *pq.Error
-		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
-			return ErrUserAlreadyExists // Например, email уже занят другим пользователем
-		}
-		return fmt.Errorf("failed to update user: %w", err)
-	}
-
-	n, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to check rows affected: %w", err)
-	}
-	if n == 0 {
-		return ErrUserNotFound
-	}
-
-	return nil
-}
-*/
-
-// Delete удаляет пользователя
-/*
-func (r *UserRepo) Delete(ctx context.Context, id int) error {
-	query := `DELETE FROM users WHERE id = $1`
-
-	result, err := r.db.ExecContext(ctx, query, id)
-	if err != nil {
-		return fmt.Errorf("failed to delete user: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to check rows affected: %w", err)
-	}
-
-	if rowsAffected == 0 {
-		// Пользователя с таким ID не существовало — это бизнес-кейс, а не ошибка БД
-		return ErrUserNotFound
-	}
-
-	return nil
-}
-*/
