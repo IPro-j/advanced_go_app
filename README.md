@@ -38,7 +38,24 @@ blog-api/
 ├── go.mod                            # Зависимости проекта
 └── README.md                         # Документация
 
-
+blog-api/
+├── cmd/api/                          # Точка входа приложения
+│   └── main.go
+├── internal/                         # Внутренние пакеты приложения
+│   ├── model/                        # Модели данных и DTO (User, Post, Comment)
+│   ├── handler/                      # HTTP хендлеры (AuthHandler, PostHandler)
+│   ├── service/                      # Бизнес‑логика (UserService, PostService)
+│   ├── repository/                   # Репозитории (PostRepo, CommentRepo, UserRepo)
+│   └── middleware/                   # Middleware (AuthMiddleware, Logger, Recovery)
+├── pkg/                              # Переиспользуемые пакеты
+│   ├── apperr/                       # Хранилище ошибок приложения
+│   ├── auth/                         # JWT и пароли (jwt.go, password.go)
+│   └── database/                     # Подключение к БД и миграции (postgres.go)
+├── migrations/                       # SQL миграции
+├── docker-compose.yml                # PostgreSQL и Adminer
+├── .env.example                      # Пример конфигурации
+├── go.mod                            # Зависимости проекта
+└── README.md    
 
 
 ## Начало работы
