@@ -1,14 +1,12 @@
 package handler
 
 import (
-	//"blog-api/internal/middleware"
 	"blog-api/internal/model"
 	"blog-api/internal/service"
 	"blog-api/pkg/apperr"
 	"blog-api/pkg/auth"
 	"strings"
 
-	//"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -61,45 +59,45 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	req.Email = strings.ToLower(req.Email)
 
-	user, err := h.userService.Register(r.Context(), &req)
-
-	if errors.Is(err, apperr.ErrInvalidUsername) {
-		writeError(w, "username is invalid", http.StatusBadRequest)
-		return
-	}
-	if errors.Is(err, apperr.ErrInvalidEmail) {
-		writeError(w, "email is invalid", http.StatusBadRequest)
-		return
-	}
-	if errors.Is(err, apperr.ErrWeakPassword) {
-		writeError(w, "password is too weak", http.StatusBadRequest)
-		return
-	}
+	token, err := h.userService.Register(r.Context(), &req)
 
 	if err != nil {
-		// Проверяем конкретную ошибку дубликата
-		if errors.Is(err, apperr.ErrUserAlreadyExists) {
-			writeError(w, "user already exists", http.StatusConflict)
-			return
 
+		if isUsernameError(err) {
+			log.Printf("username invalid, username=%q, err=%v", req.Username, err)
+			writeError(w, "username length is invalid", http.StatusBadRequest)
+			return
 		}
 
-		if errors.Is(err, apperr.ErrEmailAlreadyExists) {
-			writeError(w, "email already exists", http.StatusConflict)
+		if isPasswordError(err) {
+			log.Printf("password invalid, email=%q, err=%v", req.Email, err)
+			writeError(w, "password does not meet requirements", http.StatusBadRequest)
 			return
-
 		}
 
-		log.Printf("registration failed: %v", err)
-		writeError(w, "registration failed", http.StatusInternalServerError)
+		if errors.Is(err, apperr.ErrInvalidEmail) {
+			log.Printf("invalid email, email=%q, err=%v", req.Email, err)
+			writeError(w, "email is invalid", http.StatusBadRequest)
+			return
+		}
+
+		if errors.Is(err, apperr.ErrUserAlreadyExists) || errors.Is(err, apperr.ErrEmailAlreadyExists) {
+			log.Printf("user/email already exists, username=%q email=%q, err=%v", req.Username, req.Email, err)
+			writeError(w, "user/email already exists", http.StatusConflict)
+			return
+		}
+
+		// Все остальные ошибки (БД, токены, непредвиденные)
+		log.Printf("internal error, username=%q, email=%q, path=%s, err=%v",
+			req.Username, req.Email, r.URL.Path, err)
+		writeError(w, "registration failed due to an internal error", http.StatusInternalServerError)
 		return
+
 	}
 
-	accessToken, accessExp, err := h.jwtManager.GenerateToken(user.User.ID, user.User.Email, user.User.Username)
-	if err != nil {
-		writeError(w, "failed to generate access token", http.StatusInternalServerError)
-		return
-	}
+	log.Printf("user registered, email=%q, username=%q", req.Email, req.Username)
+
+	accessToken, accessExp := token.Token, token.ExpiresAt
 
 	resp := AuthTokenResponse{
 		AccessToken: accessToken,
@@ -133,22 +131,27 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.userService.Login(r.Context(), &req)
+	token, err := h.userService.Login(r.Context(), &req)
 	if err != nil {
-		//ошибка общая для email/password
+
+		if errors.Is(err, apperr.ErrInvalidCredentials) || errors.Is(err, apperr.ErrUserNotFound) {
+			log.Printf("login failed, email=%q, err=%v", req.Email, err)
+			writeError(w, "login failed,", http.StatusUnauthorized)
+			return
+		}
+
+		log.Printf("login failed, email=%q, err=%v", req.Email, err)
 		writeError(w, "login failed", http.StatusInternalServerError)
 		return
 	}
 
-	accessToken, exp, err := h.jwtManager.GenerateToken(user.User.ID, user.User.Email, user.User.Username)
-	if err != nil {
-		writeError(w, "failed to generate access token", http.StatusInternalServerError)
-		return
-	}
+	log.Printf("user login is successful, email=%q", req.Email)
+
+	accessToken, accessExp := token.Token, token.ExpiresAt
 
 	resp := AuthTokenResponse{
 		AccessToken: accessToken,
-		ExpiresAt:   exp.Unix(),
+		ExpiresAt:   accessExp.Unix(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")

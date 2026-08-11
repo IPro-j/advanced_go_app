@@ -2,12 +2,11 @@ package middleware
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"log"
 	"net/http"
 	"runtime/debug"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,23 +36,26 @@ func (m *LoggingMiddleware) Logger(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		// Получаем RequestID из контекста (если он уже был добавлен, например, в RequestID middleware)
-		reqID, _ := GetRequestIDFromContext(r.Context())
-		if reqID == "" {
-			reqID = uuid.New().String()
+		reqID, ok := GetRequestIDFromContext(r.Context())
+		if !ok {
+			// Это ненормально: RequestID должен быть всегда. Временно ставим заглушку.
+			m.logger.Printf("[WARN] missing request_id for %s %s", r.Method, r.URL.Path)
+			reqID = "no-request-id"
 		}
 
 		rw := newResponseWriter(w)
-		next(rw, r.WithContext(context.WithValue(r.Context(), RequestIDKey, reqID)))
+		next(rw, r) // если тут паника — управление уйдёт в Recovery, а не сюда
 
 		duration := time.Since(start)
 		ip := getClientIP(r)
 
-		m.logger.Printf("[%s] %s %s | IP: %s | Status: %d | Duration: %v",
+		// Эта строка выполнится только если паники не было
+		m.logger.Printf(
+			"[LOG] reqID=%s ip=%s method=%s path=%s status=%d duration=%v",
 			reqID,
+			ip,
 			r.Method,
 			r.URL.Path,
-			ip,
 			rw.statusCode,
 			duration,
 		)
@@ -63,29 +65,51 @@ func (m *LoggingMiddleware) Logger(next http.HandlerFunc) http.HandlerFunc {
 func (m *LoggingMiddleware) Chain() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		// Порядок важен: CORS → RequestID → Logger → Recovery
-		h := http.HandlerFunc(m.CORS(next.ServeHTTP))
-		h = http.HandlerFunc(m.RequestID(h.ServeHTTP))
-		h = http.HandlerFunc(m.Logger(h.ServeHTTP))
-		h = http.HandlerFunc(m.Recovery(h.ServeHTTP))
+		h := http.HandlerFunc(m.Recovery(next.ServeHTTP)) // ловит панику, когда request_id уже есть
+		h = http.HandlerFunc(m.RequestID(h.ServeHTTP))    // создаёт request_id до Recovery
+		h = http.HandlerFunc(m.Logger(h.ServeHTTP))       // логирует уже с request_id
+		h = http.HandlerFunc(m.CORS(h.ServeHTTP))         // самый внешний
 
 		return h
 	}
 }
 
-// Recovery перехватывает паники и возвращает 500, логируя стек
 func (m *LoggingMiddleware) Recovery(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if v := recover(); v != nil {
 				reqID, _ := GetRequestIDFromContext(r.Context())
-
+				ip := getClientIP(r)
 				stack := string(debug.Stack())
-				msg := fmt.Sprintf("panic recovered: %v\nstack:\n%s", r, stack)
 
-				m.logger.Printf("[%s] PANIC: %s", reqID, msg)
+				// Лог: всё важное для отладки (включая стек)
+				m.logger.Printf(
+					"[PANIC] reqID=%s ip=%s method=%s path=%s panic=%v\nstack:\n%s",
+					reqID,
+					ip,
+					r.Method,
+					r.URL.Path,
+					v,
+					stack,
+				)
 
-				// Безопасный ответ клиенту: не отдаём стек, только общую ошибку
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				// Ответ клиенту: единый JSON-формат, без стека
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+
+				resp := map[string]any{
+					"error":   "internal_server_error",
+					"message": "An unexpected error occurred. Please try again later.",
+				}
+
+				// Используем простой json.Marshal
+				data, err := json.Marshal(resp)
+				if err != nil {
+					// Если даже маршалинг упал — пишем хотя бы текст
+					w.Write([]byte(`{"error":"internal_server_error","message":"An unexpected error occurred."}`))
+					return
+				}
+				w.Write(data)
 			}
 		}()
 
@@ -93,15 +117,40 @@ func (m *LoggingMiddleware) Recovery(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// CORS добавляет CORS-заголовки и обрабатывает preflight (OPTIONS)
+// CORS добавляет CORS-заголовки
 func (m *LoggingMiddleware) CORS(next http.HandlerFunc) http.HandlerFunc {
+	// В реальном проекте сделать чтение из env/config
+	allowedOrigins := map[string]struct{}{
+		"http://localhost:3000":     {},
+		"https://myapp.com":         {},
+		"https://app.mycompany.com": {},
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		// В продакшене лучше проверять origin по списку разрешённых доменов
+
+		// Если Origin нет — это не браузерный CORS-запрос, можно просто идти дальше
+		if origin == "" {
+			next(w, r)
+			return
+		}
+
+		// Проверяем, есть ли origin в whitelist
+		if _, ok := allowedOrigins[origin]; !ok {
+			// Не отвечаем CORS-заголовками и не разрешаем запрос.
+			// Клиент получит ошибку , что правильно.
+			next(w, r)
+			return
+		}
+
+		// Разрешённый origin найден — ставим заголовки
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		w.Header().Set("Access-Control-Max-Age", "3600")
+
+		// Vary: Origin нужен, чтобы кэши (CDN, прокси) не отдавали один ответ для разных origin
+		w.Header().Add("Vary", "Origin")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -123,57 +172,6 @@ func (m *LoggingMiddleware) RequestID(next http.HandlerFunc) http.HandlerFunc {
 		w.Header().Set("X-Request-ID", reqID)
 
 		next(w, r)
-	}
-}
-
-// RateLimiter — простая реализация rate limiting по IP (в памяти, без persistence)
-func (m *LoggingMiddleware) RateLimiter(maxRequests int, window time.Duration) func(http.HandlerFunc) http.HandlerFunc {
-	type limiterState struct {
-		count     int
-		lastReset time.Time
-	}
-
-	// Хранилище: IP -> состояние
-	store := make(map[string]*limiterState)
-	mu := &sync.Mutex{} // нужно добавить import "sync"
-
-	return func(next http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			mu.Lock()
-			defer mu.Unlock()
-
-			now := time.Now()
-			ip := getClientIP(r)
-			state, ok := store[ip]
-
-			if !ok {
-				state = &limiterState{
-					count:     1,
-					lastReset: now,
-				}
-				store[ip] = state
-				next(w, r)
-				return
-			}
-
-			// Если окно времени истекло — сбрасываем счётчик
-			if now.Sub(state.lastReset) >= window {
-				state.count = 1
-				state.lastReset = now
-				next(w, r)
-				return
-			}
-
-			// Окно ещё не истекло: проверяем лимит
-			if state.count >= maxRequests {
-				m.logger.Printf("Rate limit exceeded for IP: %s", ip)
-				http.Error(w, "Too many requests", http.StatusTooManyRequests)
-				return
-			}
-
-			state.count++
-			next(w, r)
-		}
 	}
 }
 

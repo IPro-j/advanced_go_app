@@ -36,37 +36,37 @@ type Comment struct {
 
 // UserCreateRequest представляет запрос на создание пользователя
 type UserCreateRequest struct {
-	Username string `json:"username" validate:"required,min=3,max=50"`
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required,min=6"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 // UserLoginRequest представляет запрос на вход пользователя
 type UserLoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 // PostCreateRequest представляет запрос на создание поста
 type PostCreateRequest struct {
-	Title   string `json:"title" validate:"required,min=1,max=200"`
-	Content string `json:"content" validate:"required,min=1"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
 }
 
 // PostUpdateRequest представляет запрос на обновление поста
 type PostUpdateRequest struct {
-	Title   string `json:"title" validate:"required,min=1,max=200"`
-	Content string `json:"content" validate:"required,min=1"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
 }
 
 // CommentCreateRequest представляет запрос на создание комментария
 type CommentCreateRequest struct {
-	Content string `json:"content" validate:"required,min=1,max=1000"`
+	Content string `json:"content"`
 }
 
 // CommentUpdateRequest представляет запрос на обновление комментария
 type CommentUpdateRequest struct {
-	Content string `json:"content" validate:"required,min=1,max=1000"`
+	Content string `json:"content"`
 }
 
 // UserResponse - структура для ответа с данными пользователя (без пароля)
@@ -107,8 +107,6 @@ type CommentResponse struct {
 	CreatedAt time.Time    `json:"created_at"`
 	UpdatedAt time.Time    `json:"updated_at"`
 }
-
-// TODO: Реализовать методы для моделей:
 
 // User.ToResponse() UserResponse - преобразует User в UserResponse
 func (u *User) ToResponse() UserResponse {

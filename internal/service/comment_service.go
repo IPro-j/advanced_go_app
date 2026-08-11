@@ -13,18 +13,18 @@ import (
 type CommentService struct {
 	commentRepo repository.CommentRepository
 	postRepo    repository.PostRepository
-	userRepo    repository.UserRepository
+	//userRepo    repository.UserRepository
 }
 
 func NewCommentService(
 	commentRepo repository.CommentRepository,
 	postRepo repository.PostRepository,
-	userRepo repository.UserRepository,
+	//userRepo repository.UserRepository,
 ) *CommentService {
 	return &CommentService{
 		commentRepo: commentRepo,
 		postRepo:    postRepo,
-		userRepo:    userRepo,
+		//	userRepo:    userRepo,
 	}
 }
 
@@ -162,36 +162,6 @@ func (s *CommentService) Delete(ctx context.Context, id int, userID int) error {
 	return nil
 }
 
-// GetByAuthor получает комментарии конкретного автора с пагинацией
-
-func (s *CommentService) GetByAuthor(ctx context.Context, authorID int, limit, offset int) ([]*model.Comment, int, error) {
-	const (
-		defaultLimit = 20
-		maxLimit     = 100
-	)
-
-	if limit <= 0 {
-		limit = defaultLimit
-	} else if limit > maxLimit {
-		limit = maxLimit
-	}
-	if offset < 0 {
-		offset = 0
-	}
-
-	comments, err := s.commentRepo.ListByAuthor(ctx, authorID, limit, offset)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to list comments by author: %w", err)
-	}
-
-	total, err := s.commentRepo.CountByAuthor(ctx, authorID)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to count comments by author: %w", err)
-	}
-
-	return comments, total, nil
-}
-
 func validateCommentCreateRequest(req *model.CommentCreateRequest) error {
 	if req == nil {
 		return errors.New("request cannot be nil")
@@ -201,7 +171,7 @@ func validateCommentCreateRequest(req *model.CommentCreateRequest) error {
 	if len(content) == 0 {
 		return errors.New("content is required")
 	}
-	if len(content) > 1000 {
+	if len([]rune(content)) > 1000 {
 		return errors.New("content must be no more than 1000 characters")
 	}
 
@@ -217,7 +187,7 @@ func validateCommentUpdateRequest(req *model.CommentUpdateRequest) error {
 	if len(content) == 0 {
 		return errors.New("content cannot be empty")
 	}
-	if len(content) > 1000 {
+	if len([]rune(content)) > 1000 {
 		return errors.New("content must be no more than 1000 characters")
 	}
 

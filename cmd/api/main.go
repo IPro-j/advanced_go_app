@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
+	"time"
 
 	"blog-api/internal/handler"
 	"blog-api/internal/middleware"
@@ -22,11 +26,11 @@ import (
 func main() {
 	logger := log.New(os.Stdout, "[API] ", log.LstdFlags|log.Lshortfile)
 
-	// Создаём экземпляр твоего middleware
+	// Создаём экземпляр  middleware
 	loggingMW := middleware.NewLoggingMiddleware(logger)
 
 	if err := godotenv.Load(); err != nil {
-		log.Printf("Warning: .env file not found, using environment variables directly")
+		logger.Printf("Warning: .env file not found, using environment variables directly")
 	}
 
 	cfg := loadConfig()
@@ -41,19 +45,19 @@ func main() {
 	}
 	db, err := database.NewPostgresDB(dbConfig)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		logger.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
-	log.Println("Database connected successfully")
+	logger.Println("Database connected successfully")
 
 	if err := database.Migrate(db); err != nil {
-		log.Fatalf("Migration failed: %v", err)
+		logger.Fatalf("Migration failed: %v", err)
 	}
-	log.Println("Migrations applied successfully")
+	logger.Println("Migrations applied successfully")
 
 	jwtManager, err := auth.NewJWTManager(cfg.JWTSecret, cfg.JWTExpiryHours)
 	if err != nil {
-		log.Fatalf("Failed to create JWT manager: %v", err)
+		logger.Fatalf("Failed to create JWT manager: %v", err)
 	}
 
 	postRepo := repository.NewPostRepo(db)
@@ -62,7 +66,7 @@ func main() {
 
 	userService := service.NewUserService(userRepo, jwtManager)
 	postService := service.NewPostService(postRepo, userRepo)
-	commentService := service.NewCommentService(commentRepo, postRepo, userRepo)
+	commentService := service.NewCommentService(commentRepo, postRepo)
 
 	authHandler := handler.NewAuthHandler(userService, jwtManager)
 	postHandler := handler.NewPostHandler(postService)
@@ -72,7 +76,7 @@ func main() {
 
 	router := chi.NewRouter()
 
-	// Добавляем цепочку: CORS → RequestID → Logger → Recovery
+	// Добавляем цепочку: CORS → RequestID → L ogger → Recovery
 	router.Use(loggingMW.Chain())
 
 	// Health check
@@ -96,7 +100,7 @@ func main() {
 		r.Group(func(r chi.Router) {
 			r.Use(authMW.AuthMiddlewareForChi()) // авторизация только тут
 			r.Post("/posts", postHandler.Create)
-			r.Put("/posts/{id}", postHandler.Update)
+			r.Patch("/posts/{id}", postHandler.Update)
 			r.Delete("/posts/{id}", postHandler.Delete)
 			r.Post("/posts/{id}/comments", commentHandler.Create)
 			r.Put("/comments/{id}", commentHandler.Update)
@@ -106,9 +110,42 @@ func main() {
 	})
 
 	addr := cfg.ServerHost + ":" + strconv.Itoa(cfg.ServerPort)
-	log.Printf("Starting server on %s", addr)
-	if err := http.ListenAndServe(addr, router); err != nil {
-		log.Fatalf("Server failed to start: %v", err)
+
+	readTimeout := parseDurationWithDefault(os.Getenv("HTTP_READ_TIMEOUT"), 15*time.Second)
+	writeTimeout := parseDurationWithDefault(os.Getenv("HTTP_WRITE_TIMEOUT"), 15*time.Second)
+	idleTimeout := parseDurationWithDefault(os.Getenv("HTTP_IDLE_TIMEOUT"), 60*time.Second)
+	shutdownGracePeriod := parseDurationWithDefault(os.Getenv("HTTP_SHUTDOWN_GRACE_PERIOD"), 30*time.Second)
+
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      router,
+		ReadTimeout:  readTimeout,
+		WriteTimeout: writeTimeout,
+		IdleTimeout:  idleTimeout,
+	}
+
+	logger.Printf("Starting server on %s (read=%v, write=%v, idle=%v, shutdown_grace=%v)",
+		addr, readTimeout, writeTimeout, idleTimeout, shutdownGracePeriod)
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Fatalf("Server failed to start: %v", err)
+		}
+	}()
+
+	<-stop
+	logger.Println("Shutdown signal received")
+
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownGracePeriod)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.Printf("Graceful shutdown failed: %v", err)
+	} else {
+		logger.Println("Server stopped gracefully")
 	}
 }
 
@@ -132,9 +169,9 @@ func loadConfig() *Config {
 		ServerPort:      getEnvAsInt("SERVER_PORT", 8080),
 		DBHost:          getEnv("DB_HOST", "localhost"),
 		DBPort:          getEnvAsInt("DB_PORT", 5432),
-		DBUser:          getEnv("DB_USER", "postgres"),
-		DBPassword:      getEnv("DB_PASSWORD", "password"),
-		DBName:          getEnv("DB_NAME", "blog_db"),
+		DBUser:          getEnv("DB_USER", "blouser"),
+		DBPassword:      getEnv("DB_PASSWORD", "blogpassword"),
+		DBName:          getEnv("DB_NAME", "blogdb"),
 		DBSSLMode:       getEnv("DB_SSLMODE", "disable"),
 		JWTSecret:       getEnv("JWT_SECRET", ""),
 		JWTExpiryHours:  getEnvAsInt("JWT_EXPIRY_HOURS", 24),
@@ -155,4 +192,18 @@ func getEnvAsInt(key string, defaultValue int) int {
 		return value
 	}
 	return defaultValue
+}
+
+// parseDurationWithDefault парсит строку вида "15s", "1m", "2h" и т.п.
+// Если строка невалидна — возвращает значение по умолчанию.
+func parseDurationWithDefault(value string, defaultVal time.Duration) time.Duration {
+	if value == "" {
+		return defaultVal
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		log.Printf("Invalid duration for %s, using default %v", value, defaultVal)
+		return defaultVal
+	}
+	return d
 }

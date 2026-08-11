@@ -12,13 +12,12 @@ import (
 
 type PostService struct {
 	postRepo repository.PostRepository
-	userRepo repository.UserRepository
+	//userRepo repository.UserRepository
 }
 
 func NewPostService(postRepo repository.PostRepository, userRepo repository.UserRepository) *PostService {
 	return &PostService{
 		postRepo: postRepo,
-		userRepo: userRepo,
 	}
 }
 
@@ -49,8 +48,7 @@ func (s *PostService) Create(ctx context.Context, userID int, req *model.PostCre
 func (s *PostService) GetByID(ctx context.Context, id int) (*model.Post, error) {
 	post, err := s.postRepo.GetByID(ctx, id)
 	if err != nil {
-		// Репозиторий уже возвращает repository.ErrPostNotFound, если не найдено.
-		// Преобразуем его в наш сервисный ErrPostNotFound для единообразия.
+
 		if errors.Is(err, apperr.ErrPostNotFound) {
 			return nil, apperr.ErrPostNotFound
 		}
@@ -61,28 +59,13 @@ func (s *PostService) GetByID(ctx context.Context, id int) (*model.Post, error) 
 
 // GetAll получает список постов с пагинацией
 func (s *PostService) GetAll(ctx context.Context, limit, offset int) ([]*model.Post, int, error) {
-	const (
-		defaultLimit = 10
-		maxLimit     = 100
-	)
+	// Никакой нормализации здесь! Сервис доверяет, что limit/offset уже валидны.
 
-	// 1. Валидировать и нормализовать параметры пагинации
-	if limit <= 0 {
-		limit = defaultLimit
-	} else if limit > maxLimit {
-		limit = maxLimit
-	}
-	if offset < 0 {
-		offset = 0
-	}
-
-	// 2. Получить посты
 	posts, err := s.postRepo.GetAll(ctx, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list posts: %w", err)
 	}
 
-	// 3. Получить общее количество
 	total, err := s.postRepo.GetTotalCount(ctx)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count posts: %w", err)
@@ -157,38 +140,6 @@ func (s *PostService) Delete(ctx context.Context, id int, userID int) error {
 	}
 
 	return nil
-}
-
-// GetByAuthor получает посты конкретного автора с пагинацией
-func (s *PostService) GetByAuthor(ctx context.Context, authorID int, limit, offset int) ([]*model.Post, int, error) {
-	const (
-		defaultLimit = 10
-		maxLimit     = 100
-	)
-
-	// 1. Валидировать параметры пагинации
-	if limit <= 0 {
-		limit = defaultLimit
-	} else if limit > maxLimit {
-		limit = maxLimit
-	}
-	if offset < 0 {
-		offset = 0
-	}
-
-	// 2. Получить посты автора
-	posts, err := s.postRepo.ListByAuthor(ctx, authorID, limit, offset)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to list posts by author: %w", err)
-	}
-
-	// 3. Получить общее количество постов автора
-	total, err := s.postRepo.CountByAuthor(ctx, authorID)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to count posts by author: %w", err)
-	}
-
-	return posts, total, nil
 }
 
 // validatePostCreateRequest проверяет корректность данных для создания поста

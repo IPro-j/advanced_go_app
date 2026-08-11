@@ -9,7 +9,6 @@ import (
 )
 
 const (
-	PostIDKey contextKey = "postID"
 	// UserIDKey — ключ для хранения ID пользователя в контексте
 	UserIDKey contextKey = "userID"
 	// UserEmailKey — ключ для хранения email пользователя в контексте
@@ -47,7 +46,6 @@ func (m *AuthMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 
 		claims, err := m.jwtManager.ValidateToken(token)
 		if err != nil {
-			// Можно различать типы ошибок (истек, неверный формат и т.д.)
 			writeJSONError(w, "invalid or expired token", http.StatusUnauthorized)
 			return
 		}
@@ -55,27 +53,6 @@ func (m *AuthMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 		ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
 		ctx = context.WithValue(ctx, UserEmailKey, claims.Email)
 		ctx = context.WithValue(ctx, UserNameKey, claims.Username)
-
-		next(w, r.WithContext(ctx))
-	}
-}
-
-// Если токен валиден — добавляет данные пользователя в контекст.
-// Если токена нет или он невалиден — продолжает обработку как анонимный запрос.
-func (m *AuthMiddleware) OptionalAuth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		token := extractToken(r)
-		var ctx context.Context = r.Context()
-
-		if token != "" {
-			claims, err := m.jwtManager.ValidateToken(token)
-			if err == nil {
-				ctx = context.WithValue(ctx, UserIDKey, claims.UserID)
-				ctx = context.WithValue(ctx, UserEmailKey, claims.Email)
-				ctx = context.WithValue(ctx, UserNameKey, claims.Username)
-			}
-			// Если токен невалиден, просто продолжаем без добавления данных в контекст
-		}
 
 		next(w, r.WithContext(ctx))
 	}

@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -28,11 +27,11 @@ func NewUserService(userRepo repository.UserRepository, jwtManager *auth.JWTMana
 // Register регистрирует нового пользователя и возвращает TokenResponse
 func (s *UserService) Register(ctx context.Context, req *model.UserCreateRequest) (*model.TokenResponse, error) {
 	// 1. Валидация входных данных
-	if err := validateUserCreateRequest(req); err != nil {
-		return nil, err
+	if err := ValidateUserCreateRequest(req); err != nil {
+		return nil, fmt.Errorf("format failed: %w", err)
 	}
 
-	// 3. Проверка уникальности username
+	// 3. Проверка уникальности usernameм
 	exists, err := s.userRepo.ExistsByUsername(ctx, req.Username)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check username existence: %w", err)
@@ -75,9 +74,6 @@ func (s *UserService) Register(ctx context.Context, req *model.UserCreateRequest
 	}
 
 	// 8. Подготовка ответа под неизменяемую модель model.TokenResponse:
-	// - Token = accessToken
-	// - ExpiresAt = время истечения accessToken (если JWTManager не возвращает, можно взять константу из конфига)
-	// - User = user.ToResponse()
 
 	return &model.TokenResponse{
 		Token:     accessToken,
@@ -88,19 +84,12 @@ func (s *UserService) Register(ctx context.Context, req *model.UserCreateRequest
 
 // Login выполняет вход пользователя и возвращает TokenResponse аналогично Register
 func (s *UserService) Login(ctx context.Context, req *model.UserLoginRequest) (*model.TokenResponse, error) {
-	// 1. Валидация входных данных
-	if err := validateUserLoginRequest(req); err != nil {
-		return nil, err
-	}
 
-	// 2. Поиск пользователя по email
+	// Поиск пользователя по email
 	user, err := s.userRepo.GetByEmail(ctx, req.Email)
 	if err != nil {
-		if errors.Is(err, apperr.ErrUserNotFound) {
-			// Не раскрываем, что именно не найдено: email или пользователь
-			return nil, apperr.ErrInvalidCredentials
-		}
-		return nil, fmt.Errorf("failed to get user by email: %w", err)
+
+		return nil, err //fmt.Errorf("failed to get user by email: %w", err)
 	}
 
 	// 3. Проверка пароля (bcrypt)
@@ -123,6 +112,27 @@ func (s *UserService) Login(ctx context.Context, req *model.UserLoginRequest) (*
 	}, nil
 }
 
+// validateUserCreateRequest проверяет корректность данных для регистрации
+func ValidateUserCreateRequest(req *model.UserCreateRequest) error {
+	if req == nil {
+		return errors.New("request cannot be nil")
+	}
+
+	if err := validUserName(req.Username); err != nil {
+		return fmt.Errorf("username format failed: %w", err)
+	}
+
+	if !isValidEmail(req.Email) {
+		return apperr.ErrInvalidEmail
+	}
+
+	if err := validPassword(req.Password); err != nil {
+		return fmt.Errorf("password format failed: %w", err)
+	}
+
+	return nil
+}
+
 // GetByID получает пользователя по ID
 func (s *UserService) GetByID(ctx context.Context, id int) (*model.User, error) {
 	return s.userRepo.GetByID(ctx, id)
@@ -131,49 +141,4 @@ func (s *UserService) GetByID(ctx context.Context, id int) (*model.User, error) 
 // GetByEmail получает пользователя по email
 func (s *UserService) GetByEmail(ctx context.Context, email string) (*model.User, error) {
 	return s.userRepo.GetByEmail(ctx, email)
-}
-
-// validateUserCreateRequest проверяет корректность данных для регистрации
-func validateUserCreateRequest(req *model.UserCreateRequest) error {
-	if req == nil {
-		return errors.New("request cannot be nil")
-	}
-
-	if len(req.Username) < 3 {
-		return apperr.ErrInvalidUsername
-	}
-
-	if !isValidEmail(req.Email) {
-		return apperr.ErrInvalidEmail
-	}
-
-	if len(req.Password) < 6 {
-		return apperr.ErrWeakPassword
-	}
-
-	return nil
-}
-
-// validateUserLoginRequest проверяет корректность данных для входа
-func validateUserLoginRequest(req *model.UserLoginRequest) error {
-	if req == nil {
-		return errors.New("request cannot be nil")
-	}
-
-	email := strings.TrimSpace(req.Email)
-	password := strings.TrimSpace(req.Password)
-
-	if len(email) == 0 {
-		return errors.New("email is required")
-	}
-
-	if !isValidEmail(req.Email) {
-		return errors.New("invalid email format")
-	}
-
-	if len(password) == 0 {
-		return errors.New("password is required")
-	}
-
-	return nil
 }

@@ -73,10 +73,10 @@ func (m *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
 
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		// ЖЁСТКАЯ ПРОВЕРКА АЛГОРИТМА: доверяем только HS256
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			// Не раскрываем в ошибке, какой именно alg пришёл — это утечка информации
-			return nil, fmt.Errorf("unexpected signing method: %w", ErrInvalidToken)
+		if token.Method != jwt.SigningMethodHS256 {
+			return nil, ErrInvalidToken
 		}
+
 		return m.secretKey, nil
 	})
 
@@ -105,7 +105,7 @@ func (m *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
 // RefreshToken обновляет существующий токен
 func (m *JWTManager) RefreshToken(tokenString string) (string, time.Time, error) {
 	// 1. Валидируем старый токен
-	claims, err := m.ValidateToken(tokenString) // <-- исправлено: было Validate
+	claims, err := m.ValidateToken(tokenString)
 	if err != nil {
 		return "", time.Time{}, err // возвращаем ту же ошибку валидации
 	}

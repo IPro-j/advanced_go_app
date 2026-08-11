@@ -24,8 +24,6 @@ type UserRepository interface {
 
 	// ExistsByUsername проверяет существование пользователя по username
 	ExistsByUsername(ctx context.Context, username string) (bool, error)
-
-	// TODO: Добавить другие методы при необходимости
 }
 
 // PostRepository определяет интерфейс для работы с постами
@@ -43,10 +41,6 @@ type PostRepository interface {
 
 	// GetTotalCount получает общее количество постов
 	GetTotalCount(ctx context.Context) (int, error)
-
-	// Методы для фильтрации по автору
-	ListByAuthor(ctx context.Context, authorID int, limit, offset int) ([]*model.Post, error)
-	CountByAuthor(ctx context.Context, authorID int) (int, error)
 
 	// Update обновляет пост
 	Update(ctx context.Context, post *model.Post) error
@@ -72,10 +66,6 @@ type CommentRepository interface {
 	// GetCountByPostID получает количество комментариев к посту
 	GetCountByPostID(ctx context.Context, postID int) (int, error)
 
-	// TODO: Реализовать методы Update и Delete при необходимости
-
 	Update(ctx context.Context, comment *model.Comment) error
 	Delete(ctx context.Context, id int) error
-	ListByAuthor(ctx context.Context, authorID int, limit, offset int) ([]*model.Comment, error)
-	CountByAuthor(ctx context.Context, authorID int) (int, error)
 }

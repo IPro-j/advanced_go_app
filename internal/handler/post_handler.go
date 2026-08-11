@@ -16,6 +16,11 @@ type PostHandler struct {
 	postService *service.PostService
 }
 
+const (
+	defaultLimit = 20
+	maxLimit     = 100
+)
+
 func NewPostHandler(postService *service.PostService) *PostHandler {
 	return &PostHandler{
 		postService: postService,
@@ -85,7 +90,7 @@ func (h *PostHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetAll возвращает список постов с пагинацией
-func (h *PostHandler) GetAll(w http.ResponseWriter, r *http.Request) {
+/*func (h *PostHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -124,10 +129,79 @@ func (h *PostHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
+}*/
+
+// GetAll возвращает список постов с пагинацией
+func (h *PostHandler) GetAll(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	query := r.URL.Query()
+	limitStr := query.Get("limit")
+	offsetStr := query.Get("offset")
+
+	// 1. Валидация limit
+	limit := defaultLimit
+	if limitStr != "" {
+		l, err := strconv.Atoi(limitStr)
+		if err != nil || l <= 0 {
+			writeError(w, "invalid limit: must be a positive integer", http.StatusBadRequest)
+			return
+		}
+		limit = l
+	}
+
+	// 2. Нормализация limit (после валидации!)
+	if limit > maxLimit {
+		limit = maxLimit
+	}
+
+	// 3. Валидация offset
+	offset := 0
+	if offsetStr != "" {
+		o, err := strconv.Atoi(offsetStr)
+		if err != nil || o < 0 {
+			writeError(w, "invalid offset: must be a non-negative integer", http.StatusBadRequest)
+			return
+		}
+		offset = o
+	}
+
+	posts, total, err := h.postService.GetAll(r.Context(), limit, offset)
+	if err != nil {
+		log.Printf("GetAll posts error: %v", err)
+		writeError(w, "failed to get posts", http.StatusInternalServerError)
+		return
+	}
+
+	type PostsResponse struct {
+		Posts  []*model.Post `json:"posts"`
+		Total  int           `json:"total"`
+		Limit  int           `json:"limit"`
+		Offset int           `json:"offset"`
+	}
+
+	resp := PostsResponse{
+		Posts:  posts,
+		Total:  total,
+		Limit:  limit, // теперь это нормализованное значение
+		Offset: offset,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // Update обновляет пост
 func (h *PostHandler) Update(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		writeError(w, "method not allowed. Use PATCH for partial update.", http.StatusMethodNotAllowed)
+		return
+	}
+
 	userID, ok := getUserIDFromContext(r.Context())
 	if !ok {
 		writeError(w, "unauthorized", http.StatusUnauthorized)
@@ -232,23 +306,20 @@ func (h *PostHandler) GetByAuthor(w http.ResponseWriter, r *http.Request) {
 		offset = 0
 	}
 
-	posts, total, err := h.postService.GetByAuthor(r.Context(), authorID, limit, offset)
+	/*posts, total, err := h.postService.GetByAuthor(r.Context(), authorID, limit, offset)
 	if err != nil {
 		writeError(w, "failed to get author posts", http.StatusInternalServerError)
 		return
-	}
+	}*/
 
 	type PostsResponse struct {
-		Posts    []*model.Post `json:"posts"`
-		Total    int           `json:"total"`
-		Limit    int           `json:"limit"`
-		Offset   int           `json:"offset"`
-		AuthorID int           `json:"author_id"`
+		Limit    int `json:"limit"`
+		Offset   int `json:"offset"`
+		AuthorID int `json:"author_id"`
 	}
 
 	resp := PostsResponse{
-		Posts:    posts,
-		Total:    total,
+
 		Limit:    limit,
 		Offset:   offset,
 		AuthorID: authorID,

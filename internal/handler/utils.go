@@ -2,8 +2,10 @@ package handler
 
 import (
 	"blog-api/internal/middleware"
+	"blog-api/pkg/apperr"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 )
 
@@ -22,7 +24,16 @@ func getUserIDFromContext(ctx context.Context) (int, bool) {
 	return val, ok
 }
 
-func getPostIDFromContext(ctx context.Context) (int, bool) {
-	val, ok := ctx.Value(middleware.PostIDKey).(int)
-	return val, ok
+func isUsernameError(err error) bool {
+	return errors.Is(err, apperr.ErrUsernameTooShort) ||
+		errors.Is(err, apperr.ErrUsernameTooLong)
+}
+
+func isPasswordError(err error) bool {
+	return errors.Is(err, apperr.ErrPasswordTooShort) ||
+		errors.Is(err, apperr.ErrPasswordTooLong) ||
+		errors.Is(err, apperr.ErrNoDigit) ||
+		errors.Is(err, apperr.ErrNoUpper) ||
+		errors.Is(err, apperr.ErrNoLower) ||
+		errors.Is(err, apperr.ErrNoSpecialChar)
 }
