@@ -19,13 +19,10 @@
 
 ## Структура проекта
 
-```
+```text
 blog-api/
-
 ├── cmd/api/                          # Точка входа приложения
-
 │   └── main.go
-
 ├── internal/                         # Внутренние пакеты приложения
 │   ├── model/                        # Модели данных и DTO (User, Post, Comment)
 │   ├── handler/                      # HTTP хендлеры (AuthHandler, PostHandler, CommentHandler)
